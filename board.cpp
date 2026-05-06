@@ -114,6 +114,5 @@ vector<pair<int,int>> Board::getLegalMoves(int color) {
             }
         }
     }
-
     return moves;
 }
