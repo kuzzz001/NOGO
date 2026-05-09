@@ -88,20 +88,77 @@ int main()
 	/************************************************************************************/
 	/***********在下面填充你的代码，决策结果（本方将落子的位置）存入new_x和new_y中****************/
 
-	//下面仅为随机策略的示例代码，可删除
-	int available_list[81]; //合法位置表
-	int k = 0;
-	for (int i = 0; i<9; i++)
-		for (int j = 0; j<9; j++)
-			if (judgeAvailable(i, j, x == -1 ? 1 : -1))
-			{
-				available_list[k] = i * 9 + j;
-				k++;
-			}
-	int result = available_list[rand() % k];
-
-	int new_x = result / 9;
-	int new_y = result % 9;
+	int myColor = x == -1 ? 1 : -1;
+	int opponentColor = -myColor;
+	
+	const int positionWeight[9][9] = {
+	    {0, 0, 1, 2, 3, 2, 1, 0, 0},
+	    {0, 1, 3, 4, 5, 4, 3, 1, 0},
+	    {1, 3, 5, 6, 7, 6, 5, 3, 1},
+	    {2, 4, 6, 8, 9, 8, 6, 4, 2},
+	    {3, 5, 7, 9, 10, 9, 7, 5, 3},
+	    {2, 4, 6, 8, 9, 8, 6, 4, 2},
+	    {1, 3, 5, 6, 7, 6, 5, 3, 1},
+	    {0, 1, 3, 4, 5, 4, 3, 1, 0},
+	    {0, 0, 1, 2, 3, 2, 1, 0, 0}
+	};
+	
+	auto countLiberties = [&](int fx, int fy) -> int {
+	    bool visited[9][9] = {false};
+	    int liberties = 0;
+	    vector<pair<int, int>> stack;
+	    stack.push_back({fx, fy});
+	    visited[fx][fy] = true;
+	    
+	    while (!stack.empty()) {
+	        auto [x, y] = stack.back();
+	        stack.pop_back();
+	        
+	        for (int dir = 0; dir < 4; dir++) {
+	            int dx = x + cx[dir], dy = y + cy[dir];
+	            if (inBorder(dx, dy)) {
+	                if (board[dx][dy] == 0) {
+	                    liberties++;
+	                } else if (board[dx][dy] == board[fx][fy] && !visited[dx][dy]) {
+	                    visited[dx][dy] = true;
+	                    stack.push_back({dx, dy});
+	                }
+	            }
+	        }
+	    }
+	    return liberties;
+	};
+	
+	int bestScore = -10000;
+	int new_x = 0, new_y = 0;
+	
+	for (int i = 0; i < 9; i++) {
+	    for (int j = 0; j < 9; j++) {
+	        if (judgeAvailable(i, j, myColor)) {
+	            board[i][j] = myColor;
+	            int myLiberties = countLiberties(i, j);
+	            board[i][j] = 0;
+	            
+	            int score = myLiberties * 10 + positionWeight[i][j];
+	            
+	            for (int dir = 0; dir < 4; dir++) {
+	                int dx = i + cx[dir], dy = j + cy[dir];
+	                if (inBorder(dx, dy) && board[dx][dy] == opponentColor) {
+	                    board[i][j] = myColor;
+	                    int oppLiberties = countLiberties(dx, dy);
+	                    board[i][j] = 0;
+	                    score += oppLiberties;
+	                }
+	            }
+	            
+	            if (score > bestScore) {
+	                bestScore = score;
+	                new_x = i;
+	                new_y = j;
+	            }
+	        }
+	    }
+	}
 
 	/***********在上方填充你的代码，决策结果（本方将落子的位置）存入new_x和new_y中****************/
 	/************************************************************************************/
