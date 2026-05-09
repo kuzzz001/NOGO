@@ -69,6 +69,207 @@ bool judgeAvailable(int fx, int fy, int col)
 	return true;
 }
 
+const int positionWeight[9][9] = {
+    {0, 0, 1, 2, 3, 2, 1, 0, 0},
+    {0, 1, 3, 4, 5, 4, 3, 1, 0},
+    {1, 3, 5, 6, 7, 6, 5, 3, 1},
+    {2, 4, 6, 8, 9, 8, 6, 4, 2},
+    {3, 5, 7, 9, 10, 9, 7, 5, 3},
+    {2, 4, 6, 8, 9, 8, 6, 4, 2},
+    {1, 3, 5, 6, 7, 6, 5, 3, 1},
+    {0, 1, 3, 4, 5, 4, 3, 1, 0},
+    {0, 0, 1, 2, 3, 2, 1, 0, 0}
+};
+
+int countLiberties(int fx, int fy, int b[9][9]) {
+    bool visited[9][9] = {false};
+    bool libertiesVisited[9][9] = {false};
+    int liberties = 0;
+    vector<pair<int, int>> stack;
+    stack.push_back({fx, fy});
+    visited[fx][fy] = true;
+    int color = b[fx][fy];
+    
+    while (!stack.empty()) {
+        int x = stack.back().first;
+        int y = stack.back().second;
+        stack.pop_back();
+        
+        for (int dir = 0; dir < 4; dir++) {
+            int dx = x + cx[dir], dy = y + cy[dir];
+            if (inBorder(dx, dy)) {
+                if (b[dx][dy] == 0 && !libertiesVisited[dx][dy]) {
+                    liberties++;
+                    libertiesVisited[dx][dy] = true;
+                } else if (b[dx][dy] == color && !visited[dx][dy]) {
+                    visited[dx][dy] = true;
+                    stack.push_back({dx, dy});
+                }
+            }
+        }
+    }
+    return liberties;
+}
+
+int evaluateBoard(int b[9][9], int player) {
+    int score = 0;
+    bool visited[9][9] = {false};
+    
+    for (int i = 0; i < 9; i++) {
+        for (int j = 0; j < 9; j++) {
+            if (b[i][j] != 0 && !visited[i][j]) {
+                int liberties = countLiberties(i, j, b);
+                int color = b[i][j];
+                int groupScore = liberties * 10;
+                
+                bool tempVisited[9][9] = {false};
+                vector<pair<int, int>> stack;
+                stack.push_back({i, j});
+                tempVisited[i][j] = true;
+                
+                while (!stack.empty()) {
+                    int x = stack.back().first;
+                    int y = stack.back().second;
+                    stack.pop_back();
+                    visited[x][y] = true;
+                    groupScore += positionWeight[x][y];
+                    
+                    for (int dir = 0; dir < 4; dir++) {
+                        int dx = x + cx[dir], dy = y + cy[dir];
+                        if (inBorder(dx, dy) && b[dx][dy] == color && !tempVisited[dx][dy]) {
+                            tempVisited[dx][dy] = true;
+                            stack.push_back({dx, dy});
+                        }
+                    }
+                }
+                score += groupScore * (color == player ? 1 : -1);
+            }
+        }
+    }
+    return score;
+}
+
+vector<pair<int, int>> getValidMoves(int b[9][9], int color) {
+    vector<pair<int, int>> moves;
+    for (int i = 0; i < 9; i++) {
+        for (int j = 0; j < 9; j++) {
+            if (b[i][j] != 0) continue;
+            bool valid = true;
+            
+            b[i][j] = color;
+            bool dfsVisit[9][9] = {false};
+            bool hasAir = false;
+            vector<pair<int, int>> stack;
+            stack.push_back({i, j});
+            dfsVisit[i][j] = true;
+            
+            while (!stack.empty() && !hasAir) {
+                int x = stack.back().first;
+                int y = stack.back().second;
+                stack.pop_back();
+                for (int dir = 0; dir < 4; dir++) {
+                    int dx = x + cx[dir], dy = y + cy[dir];
+                    if (inBorder(dx, dy)) {
+                        if (b[dx][dy] == 0) {
+                            hasAir = true;
+                            break;
+                        } else if (b[dx][dy] == color && !dfsVisit[dx][dy]) {
+                            dfsVisit[dx][dy] = true;
+                            stack.push_back({dx, dy});
+                        }
+                    }
+                }
+            }
+            
+            if (!hasAir) {
+                b[i][j] = 0;
+                continue;
+            }
+            
+            for (int dir = 0; dir < 4; dir++) {
+                int dx = i + cx[dir], dy = j + cy[dir];
+                if (inBorder(dx, dy) && b[dx][dy] != 0 && b[dx][dy] != color) {
+                    bool oppVisit[9][9] = {false};
+                    bool oppHasAir = false;
+                    vector<pair<int, int>> oppStack;
+                    oppStack.push_back({dx, dy});
+                    oppVisit[dx][dy] = true;
+                    
+                    while (!oppStack.empty() && !oppHasAir) {
+                        int x = oppStack.back().first;
+                        int y = oppStack.back().second;
+                        oppStack.pop_back();
+                        for (int d = 0; d < 4; d++) {
+                            int ndx = x + cx[d], ndy = y + cy[d];
+                            if (inBorder(ndx, ndy)) {
+                                if (b[ndx][ndy] == 0) {
+                                    oppHasAir = true;
+                                    break;
+                                } else if (b[ndx][ndy] == b[dx][dy] && !oppVisit[ndx][ndy]) {
+                                    oppVisit[ndx][ndy] = true;
+                                    oppStack.push_back({ndx, ndy});
+                                }
+                            }
+                        }
+                    }
+                    
+                    if (!oppHasAir) {
+                        valid = false;
+                        break;
+                    }
+                }
+            }
+            
+            b[i][j] = 0;
+            if (valid) {
+                moves.push_back({i, j});
+            }
+        }
+    }
+    return moves;
+}
+
+const int MAX_DEPTH = 3;
+
+int minimax(int b[9][9], int depth, int alpha, int beta, int player, int originalPlayer) {
+    if (depth == 0) {
+        return evaluateBoard(b, originalPlayer);
+    }
+    
+    vector<pair<int, int>> moves = getValidMoves(b, player);
+    if (moves.empty()) {
+        return player == originalPlayer ? -10000 : 10000;
+    }
+    
+    if (player == originalPlayer) {
+        int maxEval = -10000;
+        for (size_t i = 0; i < moves.size(); i++) {
+            int x = moves[i].first;
+            int y = moves[i].second;
+            b[x][y] = player;
+            int eval = minimax(b, depth - 1, alpha, beta, -player, originalPlayer);
+            b[x][y] = 0;
+            maxEval = max(maxEval, eval);
+            alpha = max(alpha, eval);
+            if (beta <= alpha) break;
+        }
+        return maxEval;
+    } else {
+        int minEval = 10000;
+        for (size_t i = 0; i < moves.size(); i++) {
+            int x = moves[i].first;
+            int y = moves[i].second;
+            b[x][y] = player;
+            int eval = minimax(b, depth - 1, alpha, beta, -player, originalPlayer);
+            b[x][y] = 0;
+            minEval = min(minEval, eval);
+            beta = min(beta, eval);
+            if (beta <= alpha) break;
+        }
+        return minEval;
+    }
+}
+
 int main()
 {
 	srand((unsigned)time(0));
@@ -91,68 +292,18 @@ int main()
 	int myColor = x == -1 ? 1 : -1;
 	int opponentColor = -myColor;
 	
-	const int positionWeight[9][9] = {
-	    {0, 0, 1, 2, 3, 2, 1, 0, 0},
-	    {0, 1, 3, 4, 5, 4, 3, 1, 0},
-	    {1, 3, 5, 6, 7, 6, 5, 3, 1},
-	    {2, 4, 6, 8, 9, 8, 6, 4, 2},
-	    {3, 5, 7, 9, 10, 9, 7, 5, 3},
-	    {2, 4, 6, 8, 9, 8, 6, 4, 2},
-	    {1, 3, 5, 6, 7, 6, 5, 3, 1},
-	    {0, 1, 3, 4, 5, 4, 3, 1, 0},
-	    {0, 0, 1, 2, 3, 2, 1, 0, 0}
-	};
-	
-	auto countLiberties = [&](int fx, int fy) -> int {
-	    bool visited[9][9] = {false};
-	    int liberties = 0;
-	    vector<pair<int, int>> stack;
-	    stack.push_back({fx, fy});
-	    visited[fx][fy] = true;
-	    
-	    while (!stack.empty()) {
-	        auto [x, y] = stack.back();
-	        stack.pop_back();
-	        
-	        for (int dir = 0; dir < 4; dir++) {
-	            int dx = x + cx[dir], dy = y + cy[dir];
-	            if (inBorder(dx, dy)) {
-	                if (board[dx][dy] == 0) {
-	                    liberties++;
-	                } else if (board[dx][dy] == board[fx][fy] && !visited[dx][dy]) {
-	                    visited[dx][dy] = true;
-	                    stack.push_back({dx, dy});
-	                }
-	            }
-	        }
-	    }
-	    return liberties;
-	};
-	
 	int bestScore = -10000;
 	int new_x = 0, new_y = 0;
 	
 	for (int i = 0; i < 9; i++) {
 	    for (int j = 0; j < 9; j++) {
 	        if (judgeAvailable(i, j, myColor)) {
-	            board[i][j] = myColor;
-	            int myLiberties = countLiberties(i, j);
-	            board[i][j] = 0;
+            board[i][j] = myColor;
+            int eval = minimax(board, MAX_DEPTH, -10000, 10000, opponentColor, myColor);
+            board[i][j] = 0;
 	            
-	            int score = myLiberties * 10 + positionWeight[i][j];
-	            
-	            for (int dir = 0; dir < 4; dir++) {
-	                int dx = i + cx[dir], dy = j + cy[dir];
-	                if (inBorder(dx, dy) && board[dx][dy] == opponentColor) {
-	                    board[i][j] = myColor;
-	                    int oppLiberties = countLiberties(dx, dy);
-	                    board[i][j] = 0;
-	                    score += oppLiberties;
-	                }
-	            }
-	            
-	            if (score > bestScore) {
-	                bestScore = score;
+	            if (eval > bestScore) {
+	                bestScore = eval;
 	                new_x = i;
 	                new_y = j;
 	            }
