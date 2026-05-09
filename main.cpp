@@ -12,6 +12,8 @@
 #include <cstring>
 #include <ctime>
 #include <vector>
+#include <cmath>
+#include <algorithm>
 using namespace std;
 
 int board[9][9];
@@ -270,6 +272,132 @@ int minimax(int b[9][9], int depth, int alpha, int beta, int player, int origina
     }
 }
 
+struct MCTSNode {
+    int x, y;
+    int wins;
+    int visits;
+    MCTSNode* parent;
+    vector<MCTSNode*> children;
+    bool expanded;
+    
+    MCTSNode(int px, int py, MCTSNode* p) : x(px), y(py), wins(0), visits(0), parent(p), expanded(false) {}
+    
+    ~MCTSNode() {
+        for (size_t i = 0; i < children.size(); i++) {
+            delete children[i];
+        }
+    }
+};
+
+double ucb1(MCTSNode* node, double explorationParam = 1.414) {
+    if (node->visits == 0) return 1000000.0;
+    return (double)node->wins / node->visits + explorationParam * sqrt(log(node->parent->visits) / node->visits);
+}
+
+MCTSNode* select(MCTSNode* node) {
+    while (node->expanded && !node->children.empty()) {
+        MCTSNode* bestChild = node->children[0];
+        double bestUCB = ucb1(bestChild);
+        
+        for (size_t i = 1; i < node->children.size(); i++) {
+            double currentUCB = ucb1(node->children[i]);
+            if (currentUCB > bestUCB) {
+                bestUCB = currentUCB;
+                bestChild = node->children[i];
+            }
+        }
+        node = bestChild;
+    }
+    return node;
+}
+
+void expand(MCTSNode* node, int b[9][9], int player) {
+    vector<pair<int, int>> moves = getValidMoves(b, player);
+    
+    for (size_t i = 0; i < moves.size(); i++) {
+        int x = moves[i].first;
+        int y = moves[i].second;
+        MCTSNode* child = new MCTSNode(x, y, node);
+        node->children.push_back(child);
+    }
+    node->expanded = true;
+}
+
+int simulate(int b[9][9], int player, int originalPlayer) {
+    int currentPlayer = player;
+    int tempBoard[9][9];
+    
+    for (int i = 0; i < 9; i++) {
+        for (int j = 0; j < 9; j++) {
+            tempBoard[i][j] = b[i][j];
+        }
+    }
+    
+    while (true) {
+        vector<pair<int, int>> moves = getValidMoves(tempBoard, currentPlayer);
+        
+        if (moves.empty()) {
+            return currentPlayer == originalPlayer ? 0 : 1;
+        }
+        
+        int randIdx = rand() % moves.size();
+        int x = moves[randIdx].first;
+        int y = moves[randIdx].second;
+        tempBoard[x][y] = currentPlayer;
+        currentPlayer = -currentPlayer;
+    }
+}
+
+void backpropagate(MCTSNode* node, int result) {
+    while (node != nullptr) {
+        node->visits++;
+        node->wins += result;
+        node = node->parent;
+    }
+}
+
+pair<int, int> mctsSearch(int b[9][9], int player, int simulations) {
+    MCTSNode* root = new MCTSNode(-1, -1, nullptr);
+    expand(root, b, player);
+    
+    for (int i = 0; i < simulations; i++) {
+        MCTSNode* node = select(root);
+        
+        int tempBoard[9][9];
+        for (int j = 0; j < 9; j++) {
+            for (int k = 0; k < 9; k++) {
+                tempBoard[j][k] = b[j][k];
+            }
+        }
+        
+        vector<MCTSNode*> path;
+        MCTSNode* current = node;
+        while (current != root) {
+            path.push_back(current);
+            tempBoard[current->x][current->y] = (path.size() % 2 == 1) ? player : -player;
+            current = current->parent;
+        }
+        
+        int currentPlayer = (path.size() % 2 == 0) ? -player : player;
+        int result = simulate(tempBoard, currentPlayer, player);
+        backpropagate(node, result);
+    }
+    
+    MCTSNode* bestChild = nullptr;
+    int bestVisits = -1;
+    
+    for (size_t i = 0; i < root->children.size(); i++) {
+        if (root->children[i]->visits > bestVisits) {
+            bestVisits = root->children[i]->visits;
+            bestChild = root->children[i];
+        }
+    }
+    
+    pair<int, int> result = make_pair(bestChild->x, bestChild->y);
+    delete root;
+    return result;
+}
+
 int main()
 {
 	srand((unsigned)time(0));
@@ -290,26 +418,12 @@ int main()
 	/***********在下面填充你的代码，决策结果（本方将落子的位置）存入new_x和new_y中****************/
 
 	int myColor = x == -1 ? 1 : -1;
-	int opponentColor = -myColor;
 	
-	int bestScore = -10000;
-	int new_x = 0, new_y = 0;
+	const int MCTS_SIMULATIONS = 500;
+	pair<int, int> result = mctsSearch(board, myColor, MCTS_SIMULATIONS);
 	
-	for (int i = 0; i < 9; i++) {
-	    for (int j = 0; j < 9; j++) {
-	        if (judgeAvailable(i, j, myColor)) {
-            board[i][j] = myColor;
-            int eval = minimax(board, MAX_DEPTH, -10000, 10000, opponentColor, myColor);
-            board[i][j] = 0;
-	            
-	            if (eval > bestScore) {
-	                bestScore = eval;
-	                new_x = i;
-	                new_y = j;
-	            }
-	        }
-	    }
-	}
+	int new_x = result.first;
+	int new_y = result.second;
 
 	/***********在上方填充你的代码，决策结果（本方将落子的位置）存入new_x和new_y中****************/
 	/************************************************************************************/
