@@ -649,6 +649,7 @@ int main()
 				string obj = line.substr(objPos, objEnd - objPos + 1);
 				
 				int reqX = -1, reqY = -1;
+				bool hasX = false, hasY = false;
 				size_t xPos = obj.find("\"x\"");
 				size_t yPos = obj.find("\"y\"");
 				
@@ -657,8 +658,10 @@ int main()
 					if (colonPos != string::npos) {
 						try {
 							reqX = stoi(obj.substr(colonPos + 1));
+							hasX = true;
 						} catch (...) {
 							reqX = -1;
+							hasX = false;
 						}
 					}
 				}
@@ -668,15 +671,19 @@ int main()
 					if (colonPos != string::npos) {
 						try {
 							reqY = stoi(obj.substr(colonPos + 1));
+							hasY = true;
 						} catch (...) {
 							reqY = -1;
+							hasY = false;
 						}
 					}
 				}
 				
-				if (reqX != -1 && reqY != -1) {
+				if (hasX && hasY && reqX >= 0 && reqX < 9 && reqY >= 0 && reqY < 9) {
 					if (n % 2 == 0) board[reqX][reqY] = 1;
 					else board[reqX][reqY] = -1;
+					n++;
+				} else if (hasX && hasY && reqX == -1 && reqY == -1) {
 					n++;
 				}
 				
