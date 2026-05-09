@@ -17,6 +17,7 @@
 #include <unordered_map>
 #include <chrono>
 #include <map>
+#include <sstream>
 using namespace std;
 
 int board[9][9];
@@ -283,7 +284,7 @@ struct BoardHash {
                 hash ^= ((size_t)key.first[i][j] << ((i * 9 + j) * 2));
             }
         }
-        hash ^= (size_t)key.second << 162;
+        hash ^= (size_t)key.second;
         return hash;
     }
 };
@@ -627,22 +628,69 @@ int main()
 {
 	srand((unsigned)time(0));
 
-	int x, y, n;
-	cin >> n;
-	for (int i = 0; i < n - 1; i++)
-	{
-		cin >> x >> y; if (x != -1) board[x][y] = 1;	//对方
-		cin >> x >> y; if (x != -1) board[x][y] = -1; //我方
+	string line;
+	getline(cin, line);
+	
+	int n = 0;
+	int x = -1, y = -1;
+	
+	size_t reqPos = line.find("requests");
+	if (reqPos != string::npos) {
+		size_t arrPos = line.find('[', reqPos);
+		if (arrPos != string::npos) {
+			size_t pos = arrPos + 1;
+			while (pos < line.length()) {
+				size_t objPos = line.find('{', pos);
+				if (objPos == string::npos) break;
+				
+				size_t objEnd = line.find('}', objPos);
+				if (objEnd == string::npos) break;
+				
+				string obj = line.substr(objPos, objEnd - objPos + 1);
+				
+				int reqX = -1, reqY = -1;
+				size_t xPos = obj.find("\"x\"");
+				size_t yPos = obj.find("\"y\"");
+				
+				if (xPos != string::npos) {
+					size_t colonPos = obj.find(':', xPos);
+					if (colonPos != string::npos) {
+						try {
+							reqX = stoi(obj.substr(colonPos + 1));
+						} catch (...) {
+							reqX = -1;
+						}
+					}
+				}
+				
+				if (yPos != string::npos) {
+					size_t colonPos = obj.find(':', yPos);
+					if (colonPos != string::npos) {
+						try {
+							reqY = stoi(obj.substr(colonPos + 1));
+						} catch (...) {
+							reqY = -1;
+						}
+					}
+				}
+				
+				if (reqX != -1 && reqY != -1) {
+					if (n % 2 == 0) board[reqX][reqY] = 1;
+					else board[reqX][reqY] = -1;
+					n++;
+				}
+				
+				pos = objEnd + 1;
+			}
+		}
 	}
-	cin >> x >> y;  if (x != -1) board[x][y] = 1;	//对方
-
-	//此时board[][]里存储的就是当前棋盘的所有棋子信息,x和y存的是对方最近一步下的棋
-
-
-	/************************************************************************************/
-	/***********在下面填充你的代码，决策结果（本方将落子的位置）存入new_x和new_y中****************/
-
-	int myColor = x == -1 ? 1 : -1;
+	
+	if (n > 0) {
+		x = -1;
+		y = -1;
+	}
+	
+	int myColor = n % 2 == 0 ? 1 : -1;
 	int moveCount = n;
 	
 	initOpeningBook();
