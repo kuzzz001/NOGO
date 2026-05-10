@@ -13,6 +13,18 @@
 - **MCTS模拟阶段currentPlayer错误**：修复模拟阶段 `currentPlayer` 计算逻辑——在扩展出子节点(对手落子)后，模拟应从 `player`(AI) 回合开始而非连续让对手走两步
 - **三层防御体系**：mctsSearch() 返回前添加 `judgeAvailable` 最终验证；main() 回退逻辑增加空棋盘兜底遍历；确保 generate/simulate/output 三层全部有合法性校验
 - **空棋盘遍历逻辑修复**：将 `i = 9; break` 改为 `found` 标志变量，避免修改循环变量导致的未定义行为
+- **最终合法性过滤层（Final Legality Filter）**：新增 `isFinalLegal()` 函数统一验证越界/空位/合法性；mctsSearch 返回前遍历 getValidMoves 逐个 isFinalLegal 筛选；main 四层 fallback（当前点→getValidMoves列表→9×9遍历→(4,4)）；opening book 改用 isFinalLegal 校验
+- **删除不稳定的 Transposition Table**：移除 `BoardHash`/`BoardEqual`/`transpositionTable`/`probeTranspositionTable`/`storeTranspositionTable`，消除 `unordered_map<pair<int[9][9],int>>` 导致的编译不稳定问题
+- **openingBook 重构**：从 hash 匹配改为简单的 `moveCount` 开局书，去掉无效的 `getBoardHash`/`initOpeningBook`/`calculateSimulations`，移除 `<map>` `<chrono>` `<unordered_map>` 头文件
+- **simulate 加步数上限 162**：防止极端情况下的无限循环
+- **backpropagate/simulate 返回值改为 +1/-1**：增强搜索信号强度，"当 originalPlayer 胜返回 +1，负返回 -1"，平局返回 0
+- **expand() 加 isFinalLegal 安全过滤**：在 push child 前验证走法合法性
+- **evaluateBoard liberties 权重 10→7**：减少"冲中心"偏置，提高走法合理性
+- **MCTS 架构重构（消除 path 回放）**：删除 `expand()` 分离函数；`mctsSearch` 中每个迭代只构建一次 `simBoard` 状态，用 `isFinalLegal` 验证 path 每一步合法性再展开/模拟；消除"path 回放 → expand → 再 path 回放 → simulate"的双回放问题
+- **合法性判断统一为 countLiberties**：删除 `dfs_air()`/`dfs_air_visit`；`judgeAvailable` 改为调用 `countLiberties` 判断气数（liberty == 0 则非法），消除全局 `dfs_air_visit` 状态依赖
+- **rollout 增加启发式**：`simulate()` 中 80% 概率选 liberty×10 + positionWeight 最高点，20% 随机探索
+- **时间控制标准化**：MCTS 循环条件改为 `(clock()-startTime)/CLOCKS_PER_SEC >= 0.95`
+- **fallback 遍历 isFinalLegal**：MCTS fallback 改为全棋盘 `isFinalLegal` 扫描
 
 #### 新增功能
 - **卡时控制**：使用 `clock()` 实现时间控制，预留5%时间余量（0.95 * CLOCKS_PER_SEC）
