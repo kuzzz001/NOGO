@@ -638,6 +638,14 @@ pair<int, int> mctsSearch(int b[9][9], int player, int timeLimit) {
     }
     
     pair<int, int> result = bestChild != nullptr ? make_pair(bestChild->x, bestChild->y) : make_pair(4, 4);
+    
+    if (!judgeAvailable(result.first, result.second, player, b)) {
+        vector<pair<int, int>> moves = getValidMoves(b, player);
+        if (!moves.empty()) {
+            result = moves[0];
+        }
+    }
+    
     delete root;
     return result;
 }
@@ -757,13 +765,21 @@ int main()
 
     // 修复：最终保险
     if (!judgeAvailable(new_x, new_y, myColor, board)) {
-
-        vector<pair<int, int>> moves =
-            getValidMoves(board, myColor);
-
+        vector<pair<int, int>> moves = getValidMoves(board, myColor);
         if (!moves.empty()) {
             new_x = moves[0].first;
             new_y = moves[0].second;
+        } else {
+            bool found = false;
+            for (int i = 0; i < 9 && !found; i++) {
+                for (int j = 0; j < 9 && !found; j++) {
+                    if (board[i][j] == 0) {
+                        new_x = i;
+                        new_y = j;
+                        found = true;
+                    }
+                }
+            }
         }
     }
 	

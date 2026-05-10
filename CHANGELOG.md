@@ -11,6 +11,8 @@
 - **气数判断错误**：修复 `judgeAvailable()` 函数中检查相邻敌方棋子时 `dfs_air_visit` 数组未重置的问题，确保每次气数检查都是独立的
 - **MCTS玩家角色计算错误**：修复 `mctsSearch()` 中扩展阶段和模拟阶段的 `nextPlayer`/`currentPlayer` 计算逻辑，同时修复 `tempBoard` 填充时从根到叶正确按层级分配 `player`/`-player`
 - **MCTS模拟阶段currentPlayer错误**：修复模拟阶段 `currentPlayer` 计算逻辑——在扩展出子节点(对手落子)后，模拟应从 `player`(AI) 回合开始而非连续让对手走两步
+- **三层防御体系**：mctsSearch() 返回前添加 `judgeAvailable` 最终验证；main() 回退逻辑增加空棋盘兜底遍历；确保 generate/simulate/output 三层全部有合法性校验
+- **空棋盘遍历逻辑修复**：将 `i = 9; break` 改为 `found` 标志变量，避免修改循环变量导致的未定义行为
 
 #### 新增功能
 - **卡时控制**：使用 `clock()` 实现时间控制，预留5%时间余量（0.95 * CLOCKS_PER_SEC）
