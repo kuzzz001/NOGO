@@ -540,6 +540,16 @@ pair<int, int> mctsSearch(int b[9][9], int player, int timeLimit) {
     MCTSNode* root = new MCTSNode(-1, -1, nullptr);
     expand(root, b, player);
     
+    if (root->children.empty()) {
+        delete root;
+        for (int i = 0; i < 9; i++) {
+            for (int j = 0; j < 9; j++) {
+                if (b[i][j] == 0) return {i, j};
+            }
+        }
+        return {4, 4};
+    }
+    
     clock_t startTime = clock();
     int simulations = 0;
     
@@ -549,6 +559,34 @@ pair<int, int> mctsSearch(int b[9][9], int player, int timeLimit) {
         
         MCTSNode* node = select(root);
         
+        if (!node->expanded) {
+            int tempBoard[9][9];
+            for (int j = 0; j < 9; j++) {
+                for (int k = 0; k < 9; k++) {
+                    tempBoard[j][k] = b[j][k];
+                }
+            }
+            
+            vector<MCTSNode*> path;
+            MCTSNode* current = node;
+            while (current != root) {
+                path.push_back(current);
+                current = current->parent;
+            }
+            for (int i = (int)path.size() - 1; i >= 0; i--) {
+                int level = (int)path.size() - i;
+                tempBoard[path[i]->x][path[i]->y] = (level % 2 == 1) ? player : -player;
+            }
+            
+            int nextPlayer = ((int)path.size() % 2 == 0) ? player : -player;
+            expand(node, tempBoard, nextPlayer);
+        }
+        
+        MCTSNode* simNode = node;
+        if (!node->children.empty()) {
+            simNode = node->children[0];
+        }
+        
         int tempBoard[9][9];
         for (int j = 0; j < 9; j++) {
             for (int k = 0; k < 9; k++) {
@@ -557,16 +595,19 @@ pair<int, int> mctsSearch(int b[9][9], int player, int timeLimit) {
         }
         
         vector<MCTSNode*> path;
-        MCTSNode* current = node;
+        MCTSNode* current = simNode;
         while (current != root) {
             path.push_back(current);
-            tempBoard[current->x][current->y] = (path.size() % 2 == 1) ? player : -player;
             current = current->parent;
         }
+        for (int i = (int)path.size() - 1; i >= 0; i--) {
+            int level = (int)path.size() - i;
+            tempBoard[path[i]->x][path[i]->y] = (level % 2 == 1) ? player : -player;
+        }
         
-        int currentPlayer = (path.size() % 2 == 0) ? -player : player;
+        int currentPlayer = ((int)path.size() % 2 == 0) ? -player : player;
         int result = simulate(tempBoard, currentPlayer, player);
-        backpropagate(node, result);
+        backpropagate(simNode, result);
         simulations++;
     }
     
