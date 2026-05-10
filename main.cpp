@@ -70,11 +70,14 @@ bool judgeAvailable(int fx, int fy, int col, int b[9][9])
 		int dx = fx + cx[dir], dy = fy + cy[dir];
 		if (inBorder(dx, dy))
 		{
-			if (tempBoard[dx][dy] && !dfs_air_visit[dx][dy])
+			if (tempBoard[dx][dy] && tempBoard[dx][dy] != col)
+			{
+				memset(dfs_air_visit, 0, sizeof(dfs_air_visit));
 				if (!dfs_air(dx, dy, tempBoard))
 				{
 					return false;
 				}
+			}
 		}
 	}
 	return true;
