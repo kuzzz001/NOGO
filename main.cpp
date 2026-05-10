@@ -535,7 +535,14 @@ MCTSNode* select(MCTSNode* node) {
 }
 
 void expand(MCTSNode* node, int b[9][9], int player) {
-    vector<pair<int, int>> moves = getValidMoves(b, player);
+    int tempBoard[9][9];
+    for (int i = 0; i < 9; i++) {
+        for (int j = 0; j < 9; j++) {
+            tempBoard[i][j] = b[i][j];
+        }
+    }
+    
+    vector<pair<int, int>> moves = getValidMoves(tempBoard, player);
     sortMovesByHistory(moves);
     
     for (size_t i = 0; i < moves.size(); i++) {
