@@ -17,6 +17,7 @@
 - `mctsSearch()` 参数从 `simulations` 改为 `timeLimit`，支持时间控制
 - 添加 `bestChild != nullptr` 空指针检查，提高健壮性
 - 默认回退位置：当无合法走法时返回 `(4, 4)`
+- **代码复用优化**：`getValidMoves()` 函数重构，改为调用 `judgeAvailable()` 函数，消除重复代码
 
 #### 性能提升
 - 运行时间：0.95秒（符合1秒限制）

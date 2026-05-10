@@ -28,7 +28,7 @@ const int cy[] = { 0,-1,0,1 };
 bool inBorder(int x, int y) { return x >= 0 && y >= 0 && x<9 && y<9; }
 
 //true: has air
-bool dfs_air(int fx, int fy)
+bool dfs_air(int fx, int fy, int b[9][9])
 {
 	dfs_air_visit[fx][fy] = true;
 	bool flag = false;
@@ -37,10 +37,10 @@ bool dfs_air(int fx, int fy)
 		int dx = fx + cx[dir], dy = fy + cy[dir];
 		if (inBorder(dx, dy))
 		{
-			if (board[dx][dy] == 0)
+			if (b[dx][dy] == 0)
 				flag = true;
-			if (board[dx][dy] == board[fx][fy] && !dfs_air_visit[dx][dy])
-				if (dfs_air(dx, dy))
+			if (b[dx][dy] == b[fx][fy] && !dfs_air_visit[dx][dy])
+				if (dfs_air(dx, dy, b))
 					flag = true;
 		}
 	}
@@ -48,14 +48,14 @@ bool dfs_air(int fx, int fy)
 }
 
 //true: available
-bool judgeAvailable(int fx, int fy, int col)
+bool judgeAvailable(int fx, int fy, int col, int b[9][9])
 {
-	if (board[fx][fy]) return false;
-	board[fx][fy] = col;
+	if (b[fx][fy]) return false;
+	b[fx][fy] = col;
 	memset(dfs_air_visit, 0, sizeof(dfs_air_visit));
-	if (!dfs_air(fx, fy))
+	if (!dfs_air(fx, fy, b))
 	{
-		board[fx][fy] = 0;
+		b[fx][fy] = 0;
 		return false;
 	}
 	for (int dir = 0; dir < 4; dir++)
@@ -63,15 +63,15 @@ bool judgeAvailable(int fx, int fy, int col)
 		int dx = fx + cx[dir], dy = fy + cy[dir];
 		if (inBorder(dx, dy))
 		{
-			if (board[dx][dy] && !dfs_air_visit[dx][dy])
-				if (!dfs_air(dx, dy))
+			if (b[dx][dy] && !dfs_air_visit[dx][dy])
+				if (!dfs_air(dx, dy, b))
 				{
-					board[fx][fy] = 0;
+					b[fx][fy] = 0;
 					return false;
 				}
 		}
 	}
-	board[fx][fy] = 0;
+	b[fx][fy] = 0;
 	return true;
 }
 
@@ -160,74 +160,15 @@ vector<pair<int, int>> getValidMoves(int b[9][9], int color) {
     for (int i = 0; i < 9; i++) {
         for (int j = 0; j < 9; j++) {
             if (b[i][j] != 0) continue;
-            bool valid = true;
             
-            b[i][j] = color;
-            bool dfsVisit[9][9] = {false};
-            bool hasAir = false;
-            vector<pair<int, int>> stack;
-            stack.push_back({i, j});
-            dfsVisit[i][j] = true;
-            
-            while (!stack.empty() && !hasAir) {
-                int x = stack.back().first;
-                int y = stack.back().second;
-                stack.pop_back();
-                for (int dir = 0; dir < 4; dir++) {
-                    int dx = x + cx[dir], dy = y + cy[dir];
-                    if (inBorder(dx, dy)) {
-                        if (b[dx][dy] == 0) {
-                            hasAir = true;
-                            break;
-                        } else if (b[dx][dy] == color && !dfsVisit[dx][dy]) {
-                            dfsVisit[dx][dy] = true;
-                            stack.push_back({dx, dy});
-                        }
-                    }
+            int tempBoard[9][9];
+            for (int x = 0; x < 9; x++) {
+                for (int y = 0; y < 9; y++) {
+                    tempBoard[x][y] = b[x][y];
                 }
             }
             
-            if (!hasAir) {
-                b[i][j] = 0;
-                continue;
-            }
-            
-            for (int dir = 0; dir < 4; dir++) {
-                int dx = i + cx[dir], dy = j + cy[dir];
-                if (inBorder(dx, dy) && b[dx][dy] != 0 && b[dx][dy] != color) {
-                    bool oppVisit[9][9] = {false};
-                    bool oppHasAir = false;
-                    vector<pair<int, int>> oppStack;
-                    oppStack.push_back({dx, dy});
-                    oppVisit[dx][dy] = true;
-                    
-                    while (!oppStack.empty() && !oppHasAir) {
-                        int x = oppStack.back().first;
-                        int y = oppStack.back().second;
-                        oppStack.pop_back();
-                        for (int d = 0; d < 4; d++) {
-                            int ndx = x + cx[d], ndy = y + cy[d];
-                            if (inBorder(ndx, ndy)) {
-                                if (b[ndx][ndy] == 0) {
-                                    oppHasAir = true;
-                                    break;
-                                } else if (b[ndx][ndy] == b[dx][dy] && !oppVisit[ndx][ndy]) {
-                                    oppVisit[ndx][ndy] = true;
-                                    oppStack.push_back({ndx, ndy});
-                                }
-                            }
-                        }
-                    }
-                    
-                    if (!oppHasAir) {
-                        valid = false;
-                        break;
-                    }
-                }
-            }
-            
-            b[i][j] = 0;
-            if (valid) {
+            if (judgeAvailable(i, j, color, tempBoard)) {
                 moves.push_back({i, j});
             }
         }
@@ -457,7 +398,7 @@ int evaluateThreats(int b[9][9], int player) {
                 }
                 
                 tempBoard[i][j] = player;
-                if (judgeAvailable(i, j, player)) {
+                if (judgeAvailable(i, j, player, tempBoard)) {
                     int liberties = countLiberties(i, j, tempBoard);
                     if (liberties == 1) {
                         threats += 5;
@@ -476,7 +417,7 @@ int evaluateFlexibility(int b[9][9], int player) {
     
     for (int i = 0; i < 9; i++) {
         for (int j = 0; j < 9; j++) {
-            if (b[i][j] == 0 && judgeAvailable(i, j, player)) {
+            if (b[i][j] == 0 && judgeAvailable(i, j, player, b)) {
                 flexibility += positionWeight[i][j];
             }
         }
@@ -642,6 +583,7 @@ pair<int, int> mctsSearch(int b[9][9], int player, int timeLimit) {
 
 int main()
 {
+	memset(board, 0, sizeof(board));
 	srand((unsigned)time(0));
 
 	string line;
