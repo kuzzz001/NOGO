@@ -404,10 +404,14 @@ int evaluateThreats(int b[9][9], int player) {
                         tempBoard[x][y] = b[x][y];
                     }
                 }
-                
-                tempBoard[i][j] = player;
+
+                // 修复：不能提前落子
                 if (judgeAvailable(i, j, player, tempBoard)) {
+
+                    tempBoard[i][j] = player;
+
                     int liberties = countLiberties(i, j, tempBoard);
+
                     if (liberties == 1) {
                         threats += 5;
                     } else if (liberties == 2) {
@@ -540,13 +544,17 @@ pair<int, int> mctsSearch(int b[9][9], int player, int timeLimit) {
     MCTSNode* root = new MCTSNode(-1, -1, nullptr);
     expand(root, b, player);
     
+    // 修复：fallback必须返回合法点
     if (root->children.empty()) {
         delete root;
-        for (int i = 0; i < 9; i++) {
-            for (int j = 0; j < 9; j++) {
-                if (b[i][j] == 0) return {i, j};
-            }
+
+        vector<pair<int, int>> moves =
+            getValidMoves(b, player);
+
+        if (!moves.empty()) {
+            return moves[0];
         }
+
         return {4, 4};
     }
     
@@ -606,8 +614,10 @@ pair<int, int> mctsSearch(int b[9][9], int player, int timeLimit) {
             int level = (int)i + 1;
             tempBoard[path[i]->x][path[i]->y] = (level % 2 == 1) ? player : -player;
         }
-        
-        int currentPlayer = ((int)path.size() % 2 == 0) ? -player : player;
+
+        // 修复：这里必须是这个版本
+        int currentPlayer = ((int)path.size() % 2 == 0) ? player : -player;
+
         int result = simulate(tempBoard, currentPlayer, player);
         backpropagate(simNode, result);
         simulations++;
@@ -724,15 +734,38 @@ int main()
 	int new_x = 0, new_y = 0;
 	
 	pair<int, int> openingMove = lookupOpeningBook(board, moveCount);
-	if (openingMove.first != -1) {
+
+    // 修复：openingBook返回点也要检查合法
+	if (openingMove.first != -1 &&
+        judgeAvailable(openingMove.first,
+                       openingMove.second,
+                       myColor,
+                       board)) {
+
 	    new_x = openingMove.first;
 	    new_y = openingMove.second;
+
 	} else {
+
 	    int timeLimit = (int)(0.95 * CLOCKS_PER_SEC);
+
 	    pair<int, int> result = mctsSearch(board, myColor, timeLimit);
+
 	    new_x = result.first;
 	    new_y = result.second;
 	}
+
+    // 修复：最终保险
+    if (!judgeAvailable(new_x, new_y, myColor, board)) {
+
+        vector<pair<int, int>> moves =
+            getValidMoves(board, myColor);
+
+        if (!moves.empty()) {
+            new_x = moves[0].first;
+            new_y = moves[0].second;
+        }
+    }
 	
 	/***********在上方填充你的代码，决策结果（本方将落子的位置）存入new_x和new_y中****************/
 	/************************************************************************************/
