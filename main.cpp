@@ -573,8 +573,9 @@ pair<int, int> mctsSearch(int b[9][9], int player, int timeLimit) {
                 path.push_back(current);
                 current = current->parent;
             }
-            for (int i = (int)path.size() - 1; i >= 0; i--) {
-                int level = (int)path.size() - i;
+            reverse(path.begin(), path.end());
+            for (size_t i = 0; i < path.size(); i++) {
+                int level = (int)i + 1;
                 tempBoard[path[i]->x][path[i]->y] = (level % 2 == 1) ? player : -player;
             }
             
@@ -600,8 +601,9 @@ pair<int, int> mctsSearch(int b[9][9], int player, int timeLimit) {
             path.push_back(current);
             current = current->parent;
         }
-        for (int i = (int)path.size() - 1; i >= 0; i--) {
-            int level = (int)path.size() - i;
+        reverse(path.begin(), path.end());
+        for (size_t i = 0; i < path.size(); i++) {
+            int level = (int)i + 1;
             tempBoard[path[i]->x][path[i]->y] = (level % 2 == 1) ? player : -player;
         }
         
