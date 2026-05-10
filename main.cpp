@@ -51,11 +51,18 @@ bool dfs_air(int fx, int fy, int b[9][9])
 bool judgeAvailable(int fx, int fy, int col, int b[9][9])
 {
 	if (b[fx][fy]) return false;
-	b[fx][fy] = col;
+	
+	int tempBoard[9][9];
+	for (int i = 0; i < 9; i++) {
+		for (int j = 0; j < 9; j++) {
+			tempBoard[i][j] = b[i][j];
+		}
+	}
+	
+	tempBoard[fx][fy] = col;
 	memset(dfs_air_visit, 0, sizeof(dfs_air_visit));
-	if (!dfs_air(fx, fy, b))
+	if (!dfs_air(fx, fy, tempBoard))
 	{
-		b[fx][fy] = 0;
 		return false;
 	}
 	for (int dir = 0; dir < 4; dir++)
@@ -63,15 +70,13 @@ bool judgeAvailable(int fx, int fy, int col, int b[9][9])
 		int dx = fx + cx[dir], dy = fy + cy[dir];
 		if (inBorder(dx, dy))
 		{
-			if (b[dx][dy] && !dfs_air_visit[dx][dy])
-				if (!dfs_air(dx, dy, b))
+			if (tempBoard[dx][dy] && !dfs_air_visit[dx][dy])
+				if (!dfs_air(dx, dy, tempBoard))
 				{
-					b[fx][fy] = 0;
 					return false;
 				}
 		}
 	}
-	b[fx][fy] = 0;
 	return true;
 }
 
