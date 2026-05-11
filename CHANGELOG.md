@@ -1,5 +1,82 @@
 # 项目更新日志 (Changelog)
 
+## [v0.8.1] - 2026-05-11
+
+### 棋盘恢复逻辑修正（先手/后手正确分离）
+
+#### 修复
+- **oppColor 初始化顺序**：删除 `int oppColor = -myColor;` 脏写法，改为在各分支内局部声明，避免未定义行为
+- **先手恢复逻辑**：`responses[i]` → `requests[i+1]`，跳过 `requests[0]=(-1,-1)`，符合 Botzone 协议
+- **后手恢复逻辑**：`requests[i]` → `responses[i]`，对手先落子，AI 后落子
+
+#### 技术说明
+- **旧逻辑问题**：`max(requests, responses)` + 简单交替，导致先手时 `responses[0]` 对应 `requests[0]=(-1,-1)` 而非真实第一手
+- **新逻辑**：
+  - 先手（AI 黑）：`responses[0]`(AI 第 1 手) → `requests[1]`(对手第 1 手) → `responses[1]`(AI 第 2 手) ...
+  - 后手（AI 白）：`requests[0]`(对手第 1 手) → `responses[0]`(AI 第 1 手) → `requests[1]`(对手第 2 手) ...
+
+---
+
+## [v0.8.0] - 2026-05-11
+
+### JSON 解析逻辑重写（requests/responses 分离 + 先后手正确推断）
+
+#### 修复
+- **JSON 解析完全重写**：删除旧的单循环解析，改为分别解析 `requests` 和 `responses` 数组，按回合交替恢复棋盘。修复了原逻辑中"所有落子都按 n%2 分配颜色"导致的棋盘状态错误
+- **先后手正确推断**：通过 `requests[0] == (-1,-1)` 判断 AI 是否先手，先手时 AI=黑=1，后手时 AI=白=-1
+- **myColor 作用域修复**：`myColor` 初始化移到 main 开头，JSON 分支内确定颜色，非 JSON 分支在解析后确定
+- **删除 parseJsonCoord helper**：不再需要，代码精简 25 行
+
+#### 技术说明
+- **旧逻辑问题**：`board[reqX][reqY] = (n % 2 == 0) ? 1 : -1` 假设 requests 按黑白交替，但 Botzone 的 requests 包含对手所有落子（可能连续），导致颜色分配错误
+- **新逻辑**：requests 存对手历史（oppColor），responses 存自己历史（myColor），按回合交替恢复，符合 Botzone 协议
+
+---
+
+## [v0.7.0] - 2026-05-11
+
+### MCTS策略重建（单视角→交替视角 + rollout/评估逻辑全面修正）
+
+#### 修复（共7项）
+
+**🔴 核心MCTS错误**
+- **backpropagate 交替翻转结果（最关键）**：`backpropagate(node, result, originalPlayer)` 按 `node->player == originalPlayer ? result : -result` 统计。原代码所有节点用同一视角统计胜负，对手节点也会把"我赢了"当成好结果，导致 UCB 完全偏斜、select 错误、后期乱走
+- **ucb1 log(0) 防御**：`parentVisits = max(1.0, parent->visits)` 替代裸 `parent->visits`，防止 `log(0)` → NaN 污染搜索树
+
+**🟡 评估函数修正**
+- **evaluateThreats 气数逻辑反转**：`liberties >= 4 → +5`, `liberties == 3 → +2`, `liberties == 1 → -5`。NoGo 中气少 = 危险（不是威胁），原代码奖励把自己放入危险状态，导致 AI 主动缩气
+- **evaluateConnectivity 大连通块→负资产**：`connectivity += groupSize²` → `-= groupSize²`。NoGo 中大龙 = 容易被封死，原代码奖励粘连，后期直接暴毙
+
+**🟢 Rollout 策略重写**
+- **simulate 限制对方合法着数**：评分从 `lib×10` 改为检查落子后4邻域对手不可落点数（`oppRestriction += 10`），配合 lib==0 强惩罚（-200）、lib==1 惩罚（-20）、positionWeight。NoGo 真正强策略是限制对方选择，不是自己气多
+- **stepCount 上限**：`162 → 81`（9×9 最多81手）
+
+**🔵 History Heuristic**
+- **updateHistoryTable 动态权重**：固定 `depth=3` → `bestChild->visits/10+1`，MCTS 访问多的节点获得更高历史权重，引导后续搜索
+
+#### 技术说明
+- **单视角MCTS** 是初学者最经典的 MCTS 错误——所有节点共享同一个胜负视角，违背了"双方目标相反"的基本前提
+- **rollout 新启发式** 比旧版多 4 次 `judgeAvailable`/候选点，但单位迭代质量大幅提升
+- **evaluateBoardAdvanced** 综合打分设计目标已从"围棋式生存"转为"NoGo式压制"
+
+---
+
+## [v0.6.4] - 2026-05-11
+
+### 四级致命Bug修复（空点污染 + 胜负反转 + 落子顺序 + 颜色错位）
+
+#### 修复
+- **Fix 1 — countLiberties 空点防御（最危险Bug）**：`countLiberties()` 开头添加 `if (color == 0) return 0` 守卫。原代码在空点调用时 `color = 0`，DFS 会将所有空格当成"颜色0的连通块"搜索，导致后期棋盘空位少时 MCTS 评估全面失真，表现为"前期正常→中期变弱→后期疯狂下禁手"
+- **Fix 2 — simulate 先落子再算气**：rollout 评分循环改为 `tempBoard[x][y]=currentPlayer → countLiberties → tempBoard[x][y]=0` 三步操作。原代码在未落子时空点调用 countLiberties 得到 color=0，配合 Fix1 未修复时会造成全盘 DFS 爆炸
+- **Fix 3 — simulate 胜负返回值方向反转**：`currentPlayer == originalPlayer ? 1 : -1` → `? -1 : 1`。NoGo 规则"无合法落子者输"，原代码方向完全反了
+- **Fix 4 — MCTSNode 增加 player 字段**：结构体新增 `int player` 字段记录该节点由谁落子，路径重建从奇偶推断改为 `path[i]->player` 直接读取。消除深层节点颜色错位风险
+
+#### 技术说明
+- **典型表现**：修复前程序"前期正常→中期变弱→后期疯狂下禁手(如 8,6)"，根源是 `countLiberties(空点)` 的 color=0 DFS 污染
+- **player 字段**：根节点 `player = player(AI)`，根子节点 `player = player`，N层子节点 `player = -parent->player`，路径重建完全依赖实际记录值
+
+---
+
 ## [v0.6.3] - 2026-05-11
 
 ### 代码重构与关键Bug修复
