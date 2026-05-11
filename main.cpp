@@ -59,9 +59,7 @@ bool judgeAvailable(int fx, int fy, int col, int b[9][9])
 	if (b[fx][fy]) return false;
 	
 	int tempBoard[9][9];
-	for (int i = 0; i < 9; i++)
-		for (int j = 0; j < 9; j++)
-			tempBoard[i][j] = b[i][j];
+	memcpy(tempBoard, b, sizeof(tempBoard));
 	
 	tempBoard[fx][fy] = col;
 	
@@ -142,15 +140,7 @@ vector<pair<int, int>> getValidMoves(int b[9][9], int color) {
     for (int i = 0; i < 9; i++) {
         for (int j = 0; j < 9; j++) {
             if (b[i][j] != 0) continue;
-            
-            int tempBoard[9][9];
-            for (int x = 0; x < 9; x++) {
-                for (int y = 0; y < 9; y++) {
-                    tempBoard[x][y] = b[x][y];
-                }
-            }
-            
-            if (judgeAvailable(i, j, color, tempBoard)) {
+            if (judgeAvailable(i, j, color, b)) {
                 moves.push_back({i, j});
             }
         }
@@ -259,11 +249,7 @@ int evaluateThreats(int b[9][9], int player) {
         for (int j = 0; j < 9; j++) {
             if (b[i][j] == 0) {
                 int tempBoard[9][9];
-                for (int x = 0; x < 9; x++) {
-                    for (int y = 0; y < 9; y++) {
-                        tempBoard[x][y] = b[x][y];
-                    }
-                }
+                memcpy(tempBoard, b, sizeof(tempBoard));
 
                 // 修复：不能提前落子
                 if (judgeAvailable(i, j, player, tempBoard)) {
@@ -350,12 +336,7 @@ MCTSNode* select(MCTSNode* node) {
 int simulate(int b[9][9], int player, int originalPlayer) {
     int currentPlayer = player;
     int tempBoard[9][9];
-    
-    for (int i = 0; i < 9; i++) {
-        for (int j = 0; j < 9; j++) {
-            tempBoard[i][j] = b[i][j];
-        }
-    }
+    memcpy(tempBoard, b, sizeof(tempBoard));
     
     int stepCount = 0;
     while (stepCount < 162) {
@@ -371,13 +352,13 @@ int simulate(int b[9][9], int player, int originalPlayer) {
         for (size_t i = 0; i < moves.size(); i++) {
             int x = moves[i].first, y = moves[i].second;
             int lib = countLiberties(x, y, tempBoard);
-            int score = lib * 10 + positionWeight[x][y];
+            int score = lib * 10 + positionWeight[x][y] + (rand() % 5);
             if (score > bestScore) {
                 bestScore = score;
                 bestIdx = (int)i;
             }
         }
-        if (rand() % 5 < 2) {
+        if (rand() % 10 < 2) {
             bestIdx = rand() % moves.size();
         }
         
@@ -427,9 +408,7 @@ pair<int, int> mctsSearch(int b[9][9], int player) {
         MCTSNode* node = select(root);
         
         int simBoard[9][9];
-        for (int i = 0; i < 9; i++)
-            for (int j = 0; j < 9; j++)
-                simBoard[i][j] = b[i][j];
+        memcpy(simBoard, b, sizeof(simBoard));
         
         int simPlayer = player;
         if (node != root) {
@@ -439,11 +418,16 @@ pair<int, int> mctsSearch(int b[9][9], int player) {
                 path.push_back(cur);
                 cur = cur->parent;
             }
+            bool pathLegal = true;
             for (int i = (int)path.size() - 1; i >= 0; i--) {
-                if (!isFinalLegal(path[i]->x, path[i]->y, simPlayer, simBoard)) goto skip_iteration;
+                if (!isFinalLegal(path[i]->x, path[i]->y, simPlayer, simBoard)) {
+                    pathLegal = false;
+                    break;
+                }
                 simBoard[path[i]->x][path[i]->y] = simPlayer;
                 simPlayer = -simPlayer;
             }
+            if (!pathLegal) continue;
         }
         
         if (!node->expanded) {
@@ -451,7 +435,7 @@ pair<int, int> mctsSearch(int b[9][9], int player) {
             if (moves.empty()) {
                 int result = (simPlayer == player) ? -1 : 1;
                 backpropagate(node, result);
-                goto skip_iteration;
+                continue;
             }
             sortMovesByHistory(moves);
             for (size_t i = 0; i < moves.size(); i++) {
@@ -465,16 +449,19 @@ pair<int, int> mctsSearch(int b[9][9], int player) {
         {
             MCTSNode* simNode = node;
             if (!node->children.empty()) {
-                simNode = node->children[0];
-                simBoard[simNode->x][simNode->y] = simPlayer;
-                simPlayer = -simPlayer;
+                int idx = rand() % node->children.size();
+                simNode = node->children[idx];
+                if (isFinalLegal(simNode->x, simNode->y, simPlayer, simBoard)) {
+                    simBoard[simNode->x][simNode->y] = simPlayer;
+                    simPlayer = -simPlayer;
+                } else {
+                    simNode = node;
+                }
             }
             
             int result = simulate(simBoard, simPlayer, player);
             backpropagate(simNode, result);
         }
-        
-        skip_iteration: ;
     }
     
     MCTSNode* bestChild = nullptr;
@@ -490,22 +477,50 @@ pair<int, int> mctsSearch(int b[9][9], int player) {
         updateHistoryTable(bestChild->x, bestChild->y, 3);
     }
     
-    pair<int, int> result = bestChild != nullptr ? make_pair(bestChild->x, bestChild->y) : make_pair(4, 4);
+    pair<int, int> result = {-1, -1};
+    if (bestChild != nullptr && isFinalLegal(bestChild->x, bestChild->y, player, b)) {
+        result = {bestChild->x, bestChild->y};
+    }
     
-    if (!isFinalLegal(result.first, result.second, player, b)) {
-        for (int i = 0; i < 9 && result.first == -1; i++) {
+    if (result.first == -1) {
+        for (int i = 0; i < 9; i++) {
             for (int j = 0; j < 9; j++) {
                 if (isFinalLegal(i, j, player, b)) {
                     result = {i, j};
-                    break;
+                    i = 9; break;
                 }
             }
         }
-        if (result.first == -1) result = {4, 4};
     }
+    if (result.first == -1) result = {4, 4};
     
     delete root;
     return result;
+}
+
+bool parseJsonCoord(const string& obj, int& x, int& y) {
+    x = -1; y = -1;
+    bool foundX = false, foundY = false;
+    
+    size_t xPos = obj.find("\"x\"");
+    if (xPos != string::npos) {
+        size_t col = obj.find(':', xPos);
+        if (col != string::npos) {
+            try { x = stoi(obj.substr(col + 1)); foundX = true; }
+            catch (...) {}
+        }
+    }
+    
+    size_t yPos = obj.find("\"y\"");
+    if (yPos != string::npos) {
+        size_t col = obj.find(':', yPos);
+        if (col != string::npos) {
+            try { y = stoi(obj.substr(col + 1)); foundY = true; }
+            catch (...) {}
+        }
+    }
+    
+    return foundX && foundY;
 }
 
 int main()
@@ -530,49 +545,17 @@ int main()
 				while (pos < line.length()) {
 					size_t objPos = line.find('{', pos);
 					if (objPos == string::npos) break;
-					
 					size_t objEnd = line.find('}', objPos);
 					if (objEnd == string::npos) break;
 					
-					string obj = line.substr(objPos, objEnd - objPos + 1);
-					
-					int reqX = -1, reqY = -1;
-					bool hasX = false, hasY = false;
-					size_t xPos = obj.find("\"x\"");
-					size_t yPos = obj.find("\"y\"");
-					
-					if (xPos != string::npos) {
-						size_t colonPos = obj.find(':', xPos);
-						if (colonPos != string::npos) {
-							try {
-								reqX = stoi(obj.substr(colonPos + 1));
-								hasX = true;
-							} catch (...) {
-								reqX = -1;
-								hasX = false;
-							}
+					int reqX, reqY;
+					if (parseJsonCoord(line.substr(objPos, objEnd - objPos + 1), reqX, reqY)) {
+						if (reqX >= 0 && reqX < 9 && reqY >= 0 && reqY < 9) {
+							board[reqX][reqY] = (n % 2 == 0) ? 1 : -1;
+							n++;
+						} else if (reqX == -1 && reqY == -1) {
+							n++;
 						}
-					}
-					
-					if (yPos != string::npos) {
-						size_t colonPos = obj.find(':', yPos);
-						if (colonPos != string::npos) {
-							try {
-								reqY = stoi(obj.substr(colonPos + 1));
-								hasY = true;
-							} catch (...) {
-								reqY = -1;
-								hasY = false;
-							}
-						}
-					}
-					
-					if (hasX && hasY && reqX >= 0 && reqX < 9 && reqY >= 0 && reqY < 9) {
-						if (n % 2 == 0) board[reqX][reqY] = 1;
-						else board[reqX][reqY] = -1;
-						n++;
-					} else if (hasX && hasY && reqX == -1 && reqY == -1) {
-						n++;
 					}
 					
 					pos = objEnd + 1;

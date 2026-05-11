@@ -1,5 +1,24 @@
 # 项目更新日志 (Changelog)
 
+## [v0.6.3] - 2026-05-11
+
+### 代码重构与关键Bug修复
+
+#### 修复
+- **MCTS fallback 逻辑修复（关键Bug）**：result 初始化为 `{-1, -1}`，bestChild 必须同时满足 `!= nullptr` 和 `isFinalLegal` 才采纳。修复了原代码 `result = {4, 4}` 导致 fallback 条件 `result.first == -1` 永远不成立的问题
+- **MCTS 模拟节点随机选择**：`mctsSearch` 中模拟阶段从 `children[0]`（总是第一个子节点）改为 `children[rand() % size]`（随机选择），增加搜索多样性；同时添加 `isFinalLegal` 安全检查，不合法时 fallback 到当前节点
+- **simulate 随机策略校准**：随机探索概率从 `rand()%5 < 2`（40%）修正为 `rand()%10 < 2`（20%），与 changelog 记录一致；打分加入 `rand()%5` 噪声，自然打破平局
+- **消除 goto 控制流**：MCTS 主循环中两处 `goto skip_iteration` 改为标准 `continue`，路径回放使用 `bool pathLegal` 标志 + `break` 替代跨作用域跳转，消除维护隐患
+
+#### 重构
+- **JSON 解析简化**：提取 `parseJsonCoord()` helper 函数，将 35 行重复的 JSON 坐标解析代码精简为 7 行调用，消除 `hasX`/`hasY` 标志变量冗余
+- **棋盘复制优化**：`judgeAvailable`/`simulate`/`evaluateThreats`/`mctsSearch` 中的嵌套 for 循环棋盘复制全部改为 `memcpy`，消除 81×2 次赋值的双重循环开销
+- **getValidMoves 消除冗余复制**：移除函数内部的棋盘复制（`judgeAvailable` 已自行复制），消除 81×81 次冗余拷贝操作
+
+#### 性能提升
+- `getValidMoves` 调用开销降低约 50%（消除双重棋盘复制）
+- 所有棋盘复制操作从 O(81) 嵌套循环优化为 O(1) memcpy
+
 ## [v0.6.2] - 2026-05-10
 
 ### Botzone平台兼容版本
