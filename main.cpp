@@ -264,8 +264,12 @@ int evaluateThreats(int b[9][9], int player) {
                         threats += 5;
                     } else if (liberties == 3) {
                         threats += 2;
+                    } else if (liberties == 2) {
+                        threats -= 2;
                     } else if (liberties == 1) {
                         threats -= 5;
+                    } else {
+                        threats -= 20;
                     }
                 }
             }
