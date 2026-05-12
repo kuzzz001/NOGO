@@ -28,27 +28,27 @@ int countLiberties(int fx, int fy, int b[9][9]) {
     if (color == 0) return 0;
     
     bool visited[9][9] = {false};
-    bool libertiesVisited[9][9] = {false};
+    bool libVisited[9][9] = {false};
     int liberties = 0;
-    vector<pair<int, int>> stack;
-    stack.push_back({fx, fy});
+    pair<int, int> stack[81];
+    int top = 0;
+    stack[top++] = {fx, fy};
     visited[fx][fy] = true;
     
-    while (!stack.empty()) {
-        int x = stack.back().first;
-        int y = stack.back().second;
-        stack.pop_back();
+    while (top > 0) {
+        top--;
+        int x = stack[top].first;
+        int y = stack[top].second;
         
         for (int dir = 0; dir < 4; dir++) {
             int dx = x + cx[dir], dy = y + cy[dir];
-            if (inBorder(dx, dy)) {
-                if (b[dx][dy] == 0 && !libertiesVisited[dx][dy]) {
-                    liberties++;
-                    libertiesVisited[dx][dy] = true;
-                } else if (b[dx][dy] == color && !visited[dx][dy]) {
-                    visited[dx][dy] = true;
-                    stack.push_back({dx, dy});
-                }
+            if (!inBorder(dx, dy)) continue;
+            if (b[dx][dy] == 0 && !libVisited[dx][dy]) {
+                liberties++;
+                libVisited[dx][dy] = true;
+            } else if (b[dx][dy] == color && !visited[dx][dy]) {
+                visited[dx][dy] = true;
+                stack[top++] = {dx, dy};
             }
         }
     }
@@ -111,14 +111,15 @@ int evaluateBoard(int b[9][9], int player) {
                 int groupScore = liberties * 7;
                 
                 bool tempVisited[9][9] = {false};
-                vector<pair<int, int>> stack;
-                stack.push_back({i, j});
+                pair<int, int> stack[81];
+                int top = 0;
+                stack[top++] = {i, j};
                 tempVisited[i][j] = true;
                 
-                while (!stack.empty()) {
-                    int x = stack.back().first;
-                    int y = stack.back().second;
-                    stack.pop_back();
+                while (top > 0) {
+                    top--;
+                    int x = stack[top].first;
+                    int y = stack[top].second;
                     visited[x][y] = true;
                     groupScore += positionWeight[x][y];
                     
@@ -126,7 +127,7 @@ int evaluateBoard(int b[9][9], int player) {
                         int dx = x + cx[dir], dy = y + cy[dir];
                         if (inBorder(dx, dy) && b[dx][dy] == color && !tempVisited[dx][dy]) {
                             tempVisited[dx][dy] = true;
-                            stack.push_back({dx, dy});
+                            stack[top++] = {dx, dy};
                         }
                     }
                 }
@@ -218,21 +219,22 @@ int evaluateConnectivity(int b[9][9], int player) {
         for (int j = 0; j < 9; j++) {
             if (b[i][j] == player && !visited[i][j]) {
                 int groupSize = 0;
-                vector<pair<int, int>> stack;
-                stack.push_back({i, j});
+                pair<int, int> stack[81];
+                int top = 0;
+                stack[top++] = {i, j};
                 visited[i][j] = true;
                 
-                while (!stack.empty()) {
-                    int x = stack.back().first;
-                    int y = stack.back().second;
-                    stack.pop_back();
+                while (top > 0) {
+                    top--;
+                    int x = stack[top].first;
+                    int y = stack[top].second;
                     groupSize++;
                     
                     for (int dir = 0; dir < 4; dir++) {
                         int dx = x + cx[dir], dy = y + cy[dir];
                         if (inBorder(dx, dy) && b[dx][dy] == player && !visited[dx][dy]) {
                             visited[dx][dy] = true;
-                            stack.push_back({dx, dy});
+                            stack[top++] = {dx, dy};
                         }
                     }
                 }
@@ -246,48 +248,55 @@ int evaluateConnectivity(int b[9][9], int player) {
 
 int evaluateThreats(int b[9][9], int player) {
     int threats = 0;
+    int tempBoard[9][9];
+    memcpy(tempBoard, b, sizeof(tempBoard));
     
-    for (int i = 0; i < 9; i++) {
-        for (int j = 0; j < 9; j++) {
-            if (b[i][j] == 0) {
-                int tempBoard[9][9];
-                memcpy(tempBoard, b, sizeof(tempBoard));
-
-                // 修复：不能提前落子
-                if (judgeAvailable(i, j, player, tempBoard)) {
-
-                    tempBoard[i][j] = player;
-
-                    int liberties = countLiberties(i, j, tempBoard);
-
-                    if (liberties >= 4) {
-                        threats += 5;
-                    } else if (liberties == 3) {
-                        threats += 2;
-                    } else if (liberties == 2) {
-                        threats -= 2;
-                    } else if (liberties == 1) {
-                        threats -= 5;
-                    } else {
-                        threats -= 20;
-                    }
+    bool cand[9][9] = {false};
+    for (int i = 0; i < 9; i++)
+        for (int j = 0; j < 9; j++)
+            if (b[i][j] != 0)
+                for (int d = 0; d < 4; d++) {
+                    int nx = i + cx[d], ny = j + cy[d];
+                    if (inBorder(nx, ny) && b[nx][ny] == 0)
+                        cand[nx][ny] = true;
                 }
-            }
-        }
-    }
+    
+    for (int i = 0; i < 9; i++)
+        for (int j = 0; j < 9; j++)
+            if (cand[i][j])
+                if (judgeAvailable(i, j, player, tempBoard)) {
+                    tempBoard[i][j] = player;
+                    int liberties = countLiberties(i, j, tempBoard);
+                    tempBoard[i][j] = 0;
+                    
+                    if (liberties >= 4) threats += 5;
+                    else if (liberties == 3) threats += 2;
+                    else if (liberties == 2) threats -= 2;
+                    else if (liberties == 1) threats -= 5;
+                    else threats -= 20;
+                }
+    
     return threats;
 }
 
 int evaluateFlexibility(int b[9][9], int player) {
     int flexibility = 0;
     
-    for (int i = 0; i < 9; i++) {
-        for (int j = 0; j < 9; j++) {
-            if (b[i][j] == 0 && judgeAvailable(i, j, player, b)) {
+    bool cand[9][9] = {false};
+    for (int i = 0; i < 9; i++)
+        for (int j = 0; j < 9; j++)
+            if (b[i][j] != 0)
+                for (int d = 0; d < 4; d++) {
+                    int nx = i + cx[d], ny = j + cy[d];
+                    if (inBorder(nx, ny) && b[nx][ny] == 0)
+                        cand[nx][ny] = true;
+                }
+    
+    for (int i = 0; i < 9; i++)
+        for (int j = 0; j < 9; j++)
+            if (cand[i][j] && judgeAvailable(i, j, player, b))
                 flexibility += positionWeight[i][j];
-            }
-        }
-    }
+    
     return flexibility;
 }
 
@@ -344,51 +353,52 @@ MCTSNode* select(MCTSNode* node) {
 }
 
 int simulate(int b[9][9], int player, int originalPlayer) {
-    int currentPlayer = player;
     int tempBoard[9][9];
     memcpy(tempBoard, b, sizeof(tempBoard));
+    int currentPlayer = player;
     
-    int stepCount = 0;
-    while (stepCount < 81) {
-        stepCount++;
+    for (int step = 0; step < 25; step++) {
         vector<pair<int, int>> moves = getValidMoves(tempBoard, currentPlayer);
         
-        if (moves.empty()) {
+        if (moves.empty())
             return currentPlayer == originalPlayer ? -1 : 1;
-        }
+        if (moves.size() <= 2)
+            return currentPlayer == originalPlayer ? -1 : 1;
         
-        int bestIdx = 0;
-        int bestScore = -1000;
-        for (size_t i = 0; i < moves.size(); i++) {
-            int x = moves[i].first, y = moves[i].second;
-            tempBoard[x][y] = currentPlayer;
-            
-            int oppRestriction = 0;
-            for (int dir = 0; dir < 4; dir++) {
-                int nx = x + cx[dir], ny = y + cy[dir];
-                if (inBorder(nx, ny) && tempBoard[nx][ny] == 0) {
-                    if (!judgeAvailable(nx, ny, -currentPlayer, tempBoard))
-                        oppRestriction += 10;
+        int idx;
+        if (rand() % 10 < 2 || moves.size() <= 3) {
+            idx = rand() % moves.size();
+        } else {
+            int bestIdx = 0, bestScore = -10000;
+            int evalCount = min((int)moves.size(), 12);
+            for (int i = 0; i < evalCount; i++) {
+                int ci = rand() % moves.size();
+                int x = moves[ci].first, y = moves[ci].second;
+                tempBoard[x][y] = currentPlayer;
+                
+                int lib = countLiberties(x, y, tempBoard);
+                int score = lib * 4 + positionWeight[x][y];
+                
+                int blocked = 0;
+                for (int d = 0; d < 4; d++) {
+                    int nx = x + cx[d], ny = y + cy[d];
+                    if (!inBorder(nx, ny) || tempBoard[nx][ny] != 0) continue;
+                    int e = 0;
+                    for (int d2 = 0; d2 < 4; d2++) {
+                        int ax = nx + cx[d2], ay = ny + cy[d2];
+                        if (inBorder(ax, ay) && tempBoard[ax][ay] == 0) e++;
+                    }
+                    if (e == 1) blocked++;
                 }
+                score += blocked * 8;
+                
+                tempBoard[x][y] = 0;
+                if (score > bestScore) { bestScore = score; bestIdx = ci; }
             }
-            int lib = countLiberties(x, y, tempBoard);
-            if (lib == 0) oppRestriction -= 200;
-            else if (lib == 1) oppRestriction -= 20;
-            
-            tempBoard[x][y] = 0;
-            int score = oppRestriction + positionWeight[x][y] + (rand() % 5);
-            if (score > bestScore) {
-                bestScore = score;
-                bestIdx = (int)i;
-            }
-        }
-        if (rand() % 10 < 2) {
-            bestIdx = rand() % moves.size();
+            idx = bestIdx;
         }
         
-        int x = moves[bestIdx].first;
-        int y = moves[bestIdx].second;
-        tempBoard[x][y] = currentPlayer;
+        tempBoard[moves[idx].first][moves[idx].second] = currentPlayer;
         currentPlayer = -currentPlayer;
     }
     return 0;

@@ -1,5 +1,38 @@
 # 项目更新日志 (Changelog)
 
+## [v0.9.0] - 2026-05-12
+
+### 性能优化专项（4 项组合优化，目标 10x+ 迭代提升）
+
+#### 优化 1: countLiberties 固定数组栈
+- **消除 vector 堆分配**：`pair<int,int> stack[81]` + `int top` 替代 `vector<pair<int,int>>`
+- 每次 DFS 节省一次 heap allocation/free，影响所有调用方
+- 同时简化 `if (inBorder) { }` 为 `if (!inBorder) continue;` 减少嵌套
+
+#### 优化 2+4: simulate() 完全重写
+- **步数**：`81 → 25`（9×9 棋盘中后期通常 30 步内结束）
+- **提前终止**：`moves.size() ≤ 2` 时直接判胜负，避免浪费时间
+- **评估简化**：
+  - 旧：遍历全部候选 × 每组 4×`judgeAvailable`（每步 ~650 DFS 调用）
+  - 新：随机采样最多 12 个候选 × 1×`countLiberties` + 轻量邻格阻塞检测（每步 ~12 DFS 调用）
+  - **DFS 调用减少 ~50 倍/步**
+- **阻塞检测**：用"邻格空邻居计数 ≤1"近似替代 `judgeAvailable`，零 DFS
+
+#### 优化 3: 评估函数局部扫描
+- **evaluateThreats**：`81 空位全扫 → 只扫棋子邻格`（典型 20-40 个），且单次 memcpy
+- **evaluateFlexibility**：同上，只扫描棋子邻格
+- **evaluateBoard / evaluateConnectivity**：vector → 固定数组栈（消除堆分配）
+
+#### 预估效果
+| 指标 | 旧版 | 新版 | 提升 |
+|------|------|------|------|
+| simulate 每步 DFS 调用 | ~650 | ~12 | **~54x** |
+| simulate 步数上限 | 81 | 25 | **~3.2x** |
+| MCTS 迭代数（1s） | 200-800 | **2000-8000** | **~10x** |
+| 每步时间 | 954ms | **300-600ms** | 安全边界增大 |
+
+---
+
 ## [v0.8.2] - 2026-05-11
 
 ### evaluateThreats 气数阈值补全
