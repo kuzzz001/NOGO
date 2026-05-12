@@ -99,45 +99,6 @@ const int positionWeight[9][9] = {
     {0, 0, 1, 2, 3, 2, 1, 0, 0}
 };
 
-int evaluateBoard(int b[9][9], int player) {
-    int score = 0;
-    bool visited[9][9] = {false};
-    
-    for (int i = 0; i < 9; i++) {
-        for (int j = 0; j < 9; j++) {
-            if (b[i][j] != 0 && !visited[i][j]) {
-                int liberties = countLiberties(i, j, b);
-                int color = b[i][j];
-                int groupScore = liberties * 7;
-                
-                bool tempVisited[9][9] = {false};
-                pair<int, int> stack[81];
-                int top = 0;
-                stack[top++] = {i, j};
-                tempVisited[i][j] = true;
-                
-                while (top > 0) {
-                    top--;
-                    int x = stack[top].first;
-                    int y = stack[top].second;
-                    visited[x][y] = true;
-                    groupScore += positionWeight[x][y];
-                    
-                    for (int dir = 0; dir < 4; dir++) {
-                        int dx = x + cx[dir], dy = y + cy[dir];
-                        if (inBorder(dx, dy) && b[dx][dy] == color && !tempVisited[dx][dy]) {
-                            tempVisited[dx][dy] = true;
-                            stack[top++] = {dx, dy};
-                        }
-                    }
-                }
-                score += groupScore * (color == player ? 1 : -1);
-            }
-        }
-    }
-    return score;
-}
-
 vector<pair<int, int>> getValidMoves(int b[9][9], int color) {
     vector<pair<int, int>> moves;
     for (int i = 0; i < 9; i++) {
@@ -149,45 +110,6 @@ vector<pair<int, int>> getValidMoves(int b[9][9], int color) {
         }
     }
     return moves;
-}
-
-int minimax(int b[9][9], int depth, int alpha, int beta, int player, int originalPlayer) {
-    if (depth == 0) {
-        return evaluateBoard(b, originalPlayer);
-    }
-    
-    vector<pair<int, int>> moves = getValidMoves(b, player);
-    if (moves.empty()) {
-        return player == originalPlayer ? -10000 : 10000;
-    }
-    
-    if (player == originalPlayer) {
-        int maxEval = -10000;
-        for (size_t i = 0; i < moves.size(); i++) {
-            int x = moves[i].first;
-            int y = moves[i].second;
-            b[x][y] = player;
-            int eval = minimax(b, depth - 1, alpha, beta, -player, originalPlayer);
-            b[x][y] = 0;
-            maxEval = max(maxEval, eval);
-            alpha = max(alpha, eval);
-            if (beta <= alpha) break;
-        }
-        return maxEval;
-    } else {
-        int minEval = 10000;
-        for (size_t i = 0; i < moves.size(); i++) {
-            int x = moves[i].first;
-            int y = moves[i].second;
-            b[x][y] = player;
-            int eval = minimax(b, depth - 1, alpha, beta, -player, originalPlayer);
-            b[x][y] = 0;
-            minEval = min(minEval, eval);
-            beta = min(beta, eval);
-            if (beta <= alpha) break;
-        }
-        return minEval;
-    }
 }
 
 int historyTable[9][9] = {0};
@@ -209,106 +131,6 @@ pair<int, int> lookupOpeningBook(int moveCount) {
     if (moveCount == 3) return {5, 4};
     if (moveCount == 4) return {4, 5};
     return {-1, -1};
-}
-
-int evaluateConnectivity(int b[9][9], int player) {
-    bool visited[9][9] = {false};
-    int connectivity = 0;
-    
-    for (int i = 0; i < 9; i++) {
-        for (int j = 0; j < 9; j++) {
-            if (b[i][j] == player && !visited[i][j]) {
-                int groupSize = 0;
-                pair<int, int> stack[81];
-                int top = 0;
-                stack[top++] = {i, j};
-                visited[i][j] = true;
-                
-                while (top > 0) {
-                    top--;
-                    int x = stack[top].first;
-                    int y = stack[top].second;
-                    groupSize++;
-                    
-                    for (int dir = 0; dir < 4; dir++) {
-                        int dx = x + cx[dir], dy = y + cy[dir];
-                        if (inBorder(dx, dy) && b[dx][dy] == player && !visited[dx][dy]) {
-                            visited[dx][dy] = true;
-                            stack[top++] = {dx, dy};
-                        }
-                    }
-                }
-                
-                connectivity -= groupSize * groupSize;
-            }
-        }
-    }
-    return connectivity;
-}
-
-int evaluateThreats(int b[9][9], int player) {
-    int threats = 0;
-    int tempBoard[9][9];
-    memcpy(tempBoard, b, sizeof(tempBoard));
-    
-    bool cand[9][9] = {false};
-    for (int i = 0; i < 9; i++)
-        for (int j = 0; j < 9; j++)
-            if (b[i][j] != 0)
-                for (int d = 0; d < 4; d++) {
-                    int nx = i + cx[d], ny = j + cy[d];
-                    if (inBorder(nx, ny) && b[nx][ny] == 0)
-                        cand[nx][ny] = true;
-                }
-    
-    for (int i = 0; i < 9; i++)
-        for (int j = 0; j < 9; j++)
-            if (cand[i][j])
-                if (judgeAvailable(i, j, player, tempBoard)) {
-                    tempBoard[i][j] = player;
-                    int liberties = countLiberties(i, j, tempBoard);
-                    tempBoard[i][j] = 0;
-                    
-                    if (liberties >= 4) threats += 5;
-                    else if (liberties == 3) threats += 2;
-                    else if (liberties == 2) threats -= 2;
-                    else if (liberties == 1) threats -= 5;
-                    else threats -= 20;
-                }
-    
-    return threats;
-}
-
-int evaluateFlexibility(int b[9][9], int player) {
-    int flexibility = 0;
-    
-    bool cand[9][9] = {false};
-    for (int i = 0; i < 9; i++)
-        for (int j = 0; j < 9; j++)
-            if (b[i][j] != 0)
-                for (int d = 0; d < 4; d++) {
-                    int nx = i + cx[d], ny = j + cy[d];
-                    if (inBorder(nx, ny) && b[nx][ny] == 0)
-                        cand[nx][ny] = true;
-                }
-    
-    for (int i = 0; i < 9; i++)
-        for (int j = 0; j < 9; j++)
-            if (cand[i][j] && judgeAvailable(i, j, player, b))
-                flexibility += positionWeight[i][j];
-    
-    return flexibility;
-}
-
-int evaluateBoardAdvanced(int b[9][9], int player) {
-    int score = 0;
-    
-    score += evaluateBoard(b, player);
-    score += evaluateConnectivity(b, player) * 5;
-    score += evaluateThreats(b, player) * 3;
-    score += evaluateFlexibility(b, player) * 2;
-    
-    return score;
 }
 
 struct MCTSNode {
@@ -362,37 +184,36 @@ int simulate(int b[9][9], int player, int originalPlayer) {
         
         if (moves.empty())
             return currentPlayer == originalPlayer ? -1 : 1;
-        if (moves.size() <= 2)
-            return currentPlayer == originalPlayer ? -1 : 1;
         
         int idx;
-        if (rand() % 10 < 2 || moves.size() <= 3) {
+        if (rand() % 10 < 2) {
             idx = rand() % moves.size();
         } else {
-            int bestIdx = 0, bestScore = -10000;
-            int evalCount = min((int)moves.size(), 12);
+            int bestIdx = 0, bestScore = -100000;
+            int evalCount = min((int)moves.size(), 20);
             for (int i = 0; i < evalCount; i++) {
                 int ci = rand() % moves.size();
                 int x = moves[ci].first, y = moves[ci].second;
                 tempBoard[x][y] = currentPlayer;
                 
                 int lib = countLiberties(x, y, tempBoard);
-                int score = lib * 4 + positionWeight[x][y];
                 
                 int blocked = 0;
                 for (int d = 0; d < 4; d++) {
                     int nx = x + cx[d], ny = y + cy[d];
                     if (!inBorder(nx, ny) || tempBoard[nx][ny] != 0) continue;
-                    int e = 0;
+                    int emptyCount = 0;
                     for (int d2 = 0; d2 < 4; d2++) {
                         int ax = nx + cx[d2], ay = ny + cy[d2];
-                        if (inBorder(ax, ay) && tempBoard[ax][ay] == 0) e++;
+                        if (inBorder(ax, ay) && tempBoard[ax][ay] == 0) emptyCount++;
                     }
-                    if (e == 1) blocked++;
+                    if (emptyCount == 0) blocked += 3;
+                    else if (emptyCount == 1) blocked += 1;
                 }
-                score += blocked * 8;
                 
                 tempBoard[x][y] = 0;
+                
+                int score = lib * 5 + positionWeight[x][y] + blocked * 12;
                 if (score > bestScore) { bestScore = score; bestIdx = ci; }
             }
             idx = bestIdx;
@@ -431,7 +252,7 @@ pair<int, int> mctsSearch(int b[9][9], int player) {
                 if (isFinalLegal(i, j, player, b)) return {i, j};
             }
         }
-        return {4, 4};
+        return {-1, -1};
     }
     
     clock_t startTime = clock();
@@ -526,7 +347,7 @@ pair<int, int> mctsSearch(int b[9][9], int player) {
             }
         }
     }
-    if (result.first == -1) result = {4, 4};
+    if (result.first == -1) result = {-1, -1};
     
     delete root;
     return result;
@@ -728,6 +549,16 @@ int main()
 		if (new_x == -1) {
 			new_x = 4;
 			new_y = 4;
+			if (!isFinalLegal(new_x, new_y, myColor, board)) {
+				bool found = false;
+				for (int i = 0; i < 9 && !found; i++)
+					for (int j = 0; j < 9; j++)
+						if (board[i][j] == 0 && isFinalLegal(i, j, myColor, board)) {
+							new_x = i; new_y = j;
+							found = true;
+							break;
+						}
+			}
 		}
 	}
 	

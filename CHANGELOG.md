@@ -1,5 +1,35 @@
 # 项目更新日志 (Changelog)
 
+## [v1.0.0] - 2026-05-12
+
+### 【方案 B】激进重构：删死代码 + 重写 simulate + 修复非法兜底
+
+#### 一、删除死代码（-172 行，-23%）
+- **minimax()** — 仅自递归，主流程从未调用
+- **evaluateBoard()** — 仅被 minimax 和 evaluateBoardAdvanced 引用
+- **evaluateConnectivity()** — 仅被 evaluateBoardAdvanced 引用
+- **evaluateThreats()** — 仅被 evaluateBoardAdvanced 引用
+- **evaluateFlexibility()** — 仅被 evaluateBoardAdvanced 引用
+- **evaluateBoardAdvanced()** — 从未被任何路径调用
+
+#### 二、simulate() 完全重写（核心强度提升）
+| 改动 | 旧版 | 新版 |
+|------|------|------|
+| 过早判负 | `moves.size() <= 2` 直接返回 | 移除，只留 `moves.empty()` 正常终局 |
+| 候选采样 | 最多 12 个 | 最多 20 个 |
+| 阻塞检测 | `emptyCount == 1 → +1` | `emptyCount == 0 → +3`, `emptyCount == 1 → +1` |
+| 评分公式 | `lib*4 + pos + blocked*8` | `lib*5 + pos + blocked*12` |
+| 评分起点 | bestScore = -10000 | bestScore = -100000 |
+
+**关键**：`emptyCount == 0` 意味着"邻格对手绝对无法落子"→ heavy reward，这是 NoGo 核心战术。
+
+#### 三、修复非法落子兜底（3 处）
+- **mctsSearch**：`return {4,4}` → `return {-1,-1}`（无合法位置时安全返回）
+- **main 最终兜底**：`{4,4}` 后追加 `isFinalLegal` 检查 + 空位扫描
+- **兜底扫描逻辑修复**：外层循环条件从 `new_x == 4` 改为 `!found` 布尔标志，确保能正确遍历所有空位直到找到合法落子
+
+---
+
 ## [v0.9.0] - 2026-05-12
 
 ### 性能优化专项（4 项组合优化，目标 10x+ 迭代提升）
