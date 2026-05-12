@@ -23,13 +23,17 @@ const int cy[] = { 0,-1,0,1 };
 
 bool inBorder(int x, int y) { return x >= 0 && y >= 0 && x<9 && y<9; }
 
-int countLiberties(int fx, int fy, int b[9][9]) {
+int countLiberties(int fx, int fy, int b[9][9], int* outGroupSize = nullptr) {
     int color = b[fx][fy];
-    if (color == 0) return 0;
+    if (color == 0) {
+        if (outGroupSize) *outGroupSize = 0;
+        return 0;
+    }
     
     bool visited[9][9] = {false};
     bool libVisited[9][9] = {false};
     int liberties = 0;
+    int groupSize = 0;
     pair<int, int> stack[81];
     int top = 0;
     stack[top++] = {fx, fy};
@@ -39,6 +43,7 @@ int countLiberties(int fx, int fy, int b[9][9]) {
         top--;
         int x = stack[top].first;
         int y = stack[top].second;
+        groupSize++;
         
         for (int dir = 0; dir < 4; dir++) {
             int dx = x + cx[dir], dy = y + cy[dir];
@@ -52,6 +57,7 @@ int countLiberties(int fx, int fy, int b[9][9]) {
             }
         }
     }
+    if (outGroupSize) *outGroupSize = groupSize;
     return liberties;
 }
 
@@ -124,12 +130,59 @@ void sortMovesByHistory(vector<pair<int, int>>& moves) {
     });
 }
 
+int evalMovePriority(int x, int y, int player, int b[9][9]) {
+    int temp[9][9];
+    memcpy(temp, b, sizeof(temp));
+    temp[x][y] = player;
+    
+    int score = 0;
+    
+    int gs;
+    int lib = countLiberties(x, y, temp, &gs);
+    score += lib * 4;
+    score -= gs * gs * 3;
+    
+    for (int d = 0; d < 4; d++) {
+        int nx = x + cx[d], ny = y + cy[d];
+        if (!inBorder(nx, ny)) continue;
+        if (temp[nx][ny] == -player) {
+            int oppLib = countLiberties(nx, ny, temp);
+            if (oppLib == 1) score += 80;
+            else if (oppLib == 2) score += 30;
+            else if (oppLib == 3) score += 10;
+        } else if (temp[nx][ny] == 0) {
+            int blockedSides = 0;
+            for (int d2 = 0; d2 < 4; d2++) {
+                int ax = nx + cx[d2], ay = ny + cy[d2];
+                if (!inBorder(ax, ay) || temp[ax][ay] != 0) blockedSides++;
+            }
+            if (blockedSides >= 4) score += 18;
+            else if (blockedSides == 3) score += 6;
+        }
+    }
+    
+    score += positionWeight[x][y];
+    score += historyTable[x][y] / 8;
+    
+    return score;
+}
+
+void sortMovesByPriority(vector<pair<int, int>>& moves, int player, int b[9][9]) {
+    sort(moves.begin(), moves.end(), [player, b](const pair<int, int>& a, const pair<int, int>& bb) {
+        return evalMovePriority(a.first, a.second, player, b) >
+               evalMovePriority(bb.first, bb.second, player, b);
+    });
+}
+
 pair<int, int> lookupOpeningBook(int moveCount) {
-    if (moveCount == 0) return {4, 4};
-    if (moveCount == 1) return {3, 4};
-    if (moveCount == 2) return {4, 3};
-    if (moveCount == 3) return {5, 4};
-    if (moveCount == 4) return {4, 5};
+    if (moveCount == 0) return {3, 3};
+    if (moveCount == 1) return {5, 5};
+    if (moveCount == 2) return {3, 5};
+    if (moveCount == 3) return {5, 3};
+    if (moveCount == 4) return {2, 2};
+    if (moveCount == 5) return {6, 6};
+    if (moveCount == 6) return {2, 6};
+    if (moveCount == 7) return {6, 2};
     return {-1, -1};
 }
 
@@ -179,7 +232,14 @@ int simulate(int b[9][9], int player, int originalPlayer) {
     memcpy(tempBoard, b, sizeof(tempBoard));
     int currentPlayer = player;
     
-    for (int step = 0; step < 25; step++) {
+    int emptyCount = 0;
+    for (int i = 0; i < 9; i++)
+        for (int j = 0; j < 9; j++)
+            if (tempBoard[i][j] == 0) emptyCount++;
+    int maxSteps = min(emptyCount, 45);
+    int gameStage = (emptyCount > 45) ? 0 : (emptyCount > 20) ? 1 : 2;
+    
+    for (int step = 0; step < maxSteps; step++) {
         vector<pair<int, int>> moves = getValidMoves(tempBoard, currentPlayer);
         
         if (moves.empty())
@@ -196,24 +256,51 @@ int simulate(int b[9][9], int player, int originalPlayer) {
                 int x = moves[ci].first, y = moves[ci].second;
                 tempBoard[x][y] = currentPlayer;
                 
-                int lib = countLiberties(x, y, tempBoard);
+                int gs;
+                int lib = countLiberties(x, y, tempBoard, &gs);
+                int groupPenalty = gs * gs * 3;
+                
+                int oppPressure = 0;
+                for (int d = 0; d < 4; d++) {
+                    int nx = x + cx[d], ny = y + cy[d];
+                    if (!inBorder(nx, ny)) continue;
+                    if (tempBoard[nx][ny] == -currentPlayer) {
+                        int oppLib = countLiberties(nx, ny, tempBoard);
+                        if (oppLib == 1) oppPressure += 80;
+                        else if (oppLib == 2) oppPressure += 30;
+                        else if (oppLib == 3) oppPressure += 10;
+                    }
+                }
                 
                 int blocked = 0;
                 for (int d = 0; d < 4; d++) {
                     int nx = x + cx[d], ny = y + cy[d];
                     if (!inBorder(nx, ny) || tempBoard[nx][ny] != 0) continue;
-                    int emptyCount = 0;
+                    int nb = 0;
                     for (int d2 = 0; d2 < 4; d2++) {
                         int ax = nx + cx[d2], ay = ny + cy[d2];
-                        if (inBorder(ax, ay) && tempBoard[ax][ay] == 0) emptyCount++;
+                        if (!inBorder(ax, ay) || tempBoard[ax][ay] != 0) nb++;
                     }
-                    if (emptyCount == 0) blocked += 3;
-                    else if (emptyCount == 1) blocked += 1;
+                    if (nb >= 4) blocked += 5;
+                    else if (nb == 3) blocked += 2;
+                }
+                
+                int stagePosWeight;
+                if (gameStage == 0) {
+                    int distCenter = max(abs(x-4), abs(y-4));
+                    stagePosWeight = 10 - distCenter;
+                } else if (gameStage == 1) {
+                    stagePosWeight = positionWeight[x][y];
+                } else {
+                    stagePosWeight = positionWeight[x][y];
+                    if (x <= 1 || x >= 7 || y <= 1 || y >= 7)
+                        stagePosWeight = max(0, stagePosWeight - 3);
                 }
                 
                 tempBoard[x][y] = 0;
                 
-                int score = lib * 5 + positionWeight[x][y] + blocked * 12;
+                int score = lib * 5 + stagePosWeight + blocked * 6
+                          - groupPenalty + oppPressure;
                 if (score > bestScore) { bestScore = score; bestIdx = ci; }
             }
             idx = bestIdx;
@@ -236,7 +323,7 @@ void backpropagate(MCTSNode* node, int result, int originalPlayer) {
 pair<int, int> mctsSearch(int b[9][9], int player) {
     MCTSNode* root = new MCTSNode(-1, -1, player, nullptr);
     vector<pair<int, int>> rootMoves = getValidMoves(b, player);
-    sortMovesByHistory(rootMoves);
+    sortMovesByPriority(rootMoves, player, b);
     
     for (size_t i = 0; i < rootMoves.size(); i++) {
         if (!isFinalLegal(rootMoves[i].first, rootMoves[i].second, player, b)) continue;
@@ -292,7 +379,7 @@ pair<int, int> mctsSearch(int b[9][9], int player) {
                 backpropagate(node, result, player);
                 continue;
             }
-            sortMovesByHistory(moves);
+            sortMovesByPriority(moves, simPlayer, simBoard);
             for (size_t i = 0; i < moves.size(); i++) {
                 if (!isFinalLegal(moves[i].first, moves[i].second, simPlayer, simBoard)) continue;
                 MCTSNode* child = new MCTSNode(moves[i].first, moves[i].second, simPlayer, node);
