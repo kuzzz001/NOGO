@@ -178,11 +178,25 @@ def call_bot(executable, payload, timeout_sec):
     return parse_move(result.stdout), result.stdout, result.stderr
 
 
-def play_one_game(black_exec, white_exec, timeout_sec, verbose=False):
+def warmup_bot(executable, timeout_sec=5):
+    try:
+        subprocess.run(
+            [executable],
+            input='{"requests":[{"x":-1,"y":-1}],"responses":[]}\n',
+            capture_output=True,
+            text=True,
+            timeout=timeout_sec,
+        )
+    except Exception:
+        pass
+
+
+def play_one_game(black_exec, white_exec, timeout_sec, game_num=0, total_games=0):
     board = [[0 for _ in range(BOARD_SIZE)] for _ in range(BOARD_SIZE)]
     history = []
     turn = BLACK
     max_turns = BOARD_SIZE * BOARD_SIZE
+    prefix = f"[{game_num}/{total_games}]" if total_games > 0 else ""
 
     for ply in range(max_turns):
         moves = legal_moves(board, turn)
@@ -234,9 +248,8 @@ def play_one_game(black_exec, white_exec, timeout_sec, verbose=False):
 
         board[x][y] = turn
         history.append((x, y))
-        if verbose:
-            side = "B" if turn == BLACK else "W"
-            print(f"ply {ply + 1:02d}: {side} -> ({x}, {y})")
+        side = "B" if turn == BLACK else "W"
+        print(f"  {prefix} ply {ply + 1:02d}: {side} -> ({x}, {y})", flush=True)
         turn = -turn
 
     return {
@@ -248,6 +261,11 @@ def play_one_game(black_exec, white_exec, timeout_sec, verbose=False):
 
 
 def run_series(exec_a, exec_b, games, timeout_sec, verbose=False):
+    print("Warming up bots...", flush=True)
+    warmup_bot(exec_a)
+    warmup_bot(exec_b)
+    print("Warm-up done.\n", flush=True)
+
     stats = {
         "A_wins": 0,
         "B_wins": 0,
@@ -263,7 +281,11 @@ def run_series(exec_a, exec_b, games, timeout_sec, verbose=False):
         black_exec = exec_a if a_is_black else exec_b
         white_exec = exec_b if a_is_black else exec_a
 
-        result = play_one_game(black_exec, white_exec, timeout_sec, verbose=verbose)
+        a_color = "black" if a_is_black else "white"
+        print(f"=== Game {game_index + 1}/{games} | A={a_color} ===", flush=True)
+
+        result = play_one_game(black_exec, white_exec, timeout_sec,
+                               game_num=game_index + 1, total_games=games)
         winner = result["winner"]
 
         if winner == BLACK:
@@ -300,12 +322,17 @@ def run_series(exec_a, exec_b, games, timeout_sec, verbose=False):
         if "stderr" in result:
             record["stderr"] = result["stderr"]
         stats["details"].append(record)
+
+        total_decided = stats["A_wins"] + stats["B_wins"]
+        a_rate = f"{stats['A_wins']/total_decided:.0%}" if total_decided else "-"
         print(
             f"Game {game_index + 1:03d} | "
             f"A={record['A_color']:>5s} | "
             f"winner={winner_name:>4s} | "
             f"moves={record['moves']:>2d} | "
-            f"{record['reason']}"
+            f"{record['reason']} | "
+            f"running A:{a_rate} ({stats['A_wins']}-{stats['B_wins']})",
+            flush=True,
         )
 
     return stats

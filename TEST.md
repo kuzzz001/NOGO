@@ -499,5 +499,162 @@ g++ -std=c++17 -O2 main.cpp -o nogo
 
 ---
 
-**文档版本**：v1.0  
-**最后更新**：2026-05-09
+## 十、duel_nogo.py 对战脚本
+
+### 10.1 脚本简介
+
+`duel_nogo.py` 是一个全自动的对战测试脚本，用于在不围棋中对比两个 Bot 的强度。它支持：
+
+- 自动编译 `.cpp` 源文件或直接运行可执行文件
+- 通过子进程 stdin/stdout 模拟 Botzone 通信协议
+- 独立判定合法性和终局条件（不信任 Bot 内部规则）
+- 记录完整着法序列、终局棋盘、胜负原因
+- 自动交替先手，消除先后手偏差
+
+### 10.2 基本用法
+
+```bash
+python3 duel_nogo.py <A.cpp> <B.cpp> [选项]
+```
+
+#### 必填参数
+
+| 参数 | 说明 |
+|------|------|
+| `bot_a` | Bot A 的 `.cpp` 源文件或已编译的可执行文件路径 |
+| `bot_b` | Bot B 的 `.cpp` 源文件或已编译的可执行文件路径 |
+
+#### 可选参数
+
+| 参数 | 默认值 | 说明 |
+|------|--------|------|
+| `--games N` | 20 | 对局数。奇数局 A 执黑先手，偶数局 B 执黑先手 |
+| `--timeout T` | 1.2 | 每步超时限制（秒），超时判负 |
+| `--save-log <文件>` | 无 | 将完整对战日志保存为 JSON 文件 |
+| `--flags-a "..."` | 空 | Bot A 的额外编译参数，如 `-ljsoncpp` |
+| `--flags-b "..."` | 空 | Bot B 的额外编译参数 |
+| `--verbose` | 关 | 逐步打印着法坐标 |
+| `--build-dir <目录>` | `.duel_build` | 编译产物存放目录 |
+
+### 10.3 使用示例
+
+```bash
+# 基础：first.cpp vs new1.cpp，对局 30 局
+python3 duel_nogo.py first.cpp new1.cpp --games 30
+
+# 自对弈：验证 Bot 无 bug（应接近 50%）
+python3 duel_nogo.py new1.cpp new1.cpp --games 4
+
+# 新版 vs 旧版回归测试 + 保存日志
+python3 duel_nogo.py new1_v2.cpp new1.cpp --games 50 --save-log v2_vs_now.json
+
+# Bot 依赖 jsoncpp 库
+python3 duel_nogo.py bot.cpp new1.cpp --games 10 --flags-a "-ljsoncpp"
+
+# 调试模式：逐步查看着法
+python3 duel_nogo.py first.cpp new1.cpp --games 2 --verbose
+
+# 自定义编译产物目录
+python3 duel_nogo.py first.cpp new1.cpp --build-dir build_tmp
+
+# 使用预编译的二进制
+python3 duel_nogo.py ./build/bot_a.out ./build/bot_b.out --games 20
+```
+
+### 10.4 输出解读
+
+#### 终端输出
+
+```
+Game 001 | A=black | winner=   B | moves= 0 | black_timeout
+Game 002 | A=white | winner=   A | moves=59 | white_illegal_move
+Game 003 | A=black | winner=   A | moves=72 | black_no_legal_move
+
+Summary
+A wins        : 2
+B wins        : 1
+A as black    : 1
+A as white    : 1
+A win rate    : 66.67%
+B win rate    : 33.33%
+```
+
+- **A=black**：A 本局执黑
+- **winner=A/B**：胜方
+- **moves**：总着法数（一个回合算两步）
+- **失败原因**：
+  - `timeout`：超时
+  - `illegal_move:X,Y`：在 (X,Y) 落了不合法位置
+  - `no_legal_move`：无可走之处，规则判负
+
+#### 日志格式（`--save-log`）
+
+```json
+{
+  "bot_a": "/path/to/bot_a.cpp",
+  "bot_b": "/path/to/bot_b.cpp",
+  "games": 50,
+  "timeout": 1.0,
+  "summary": {
+    "A_wins": 45,
+    "B_wins": 5,
+    "A_black_wins": 22,
+    "A_white_wins": 23,
+    "B_black_wins": 3,
+    "B_white_wins": 2
+  },
+  "games_detail": [
+    {
+      "game": 1,
+      "A_color": "black",
+      "winner": "A",
+      "reason": "white_illegal_move",
+      "moves": 31,
+      "history": [[7,8], [8,0], [6,7], [6,0], ...],
+      "final_board": [[1,-1,0,...], ...]
+    }
+  ]
+}
+```
+
+### 10.5 迭代测试工作流
+
+建议的迭代流程，每次优化后做新旧对比：
+
+```bash
+# 1. 保存当前版本为快照
+cp new1.cpp new1_v3.cpp
+
+# 2. 修改 new1.cpp ...
+
+# 3. 新版 vs 旧版
+python3 duel_nogo.py new1_v3.cpp new1.cpp --games 50 --save-log v3_vs_v4.json
+
+# 4. 确认无退化后再提交
+git add new1.cpp
+git commit -m "optimize: xxx"
+```
+
+### 10.6 工作原理
+
+**通信协议**：模拟 Botzone 平台的 JSON 通信
+
+- **输入**（Bot 收到）：`{"requests":[{"x":-1,"y":-1},...],"responses":[{"x":4,"y":4},...]}`
+- **输出**（Bot 返回）：`{"response":{"x":X,"y":Y}}`
+
+**裁判逻辑**：
+1. 脚本独立维护一份棋盘
+2. 每次收到 Bot 的着法后，用脚本内置的规则判定器校验合法性
+3. 着法不合法 → 对方胜，原因 `illegal_move`
+4. 超时 → 对方胜，原因 `timeout`
+5. 无可走之处 → 当前方负，原因 `no_legal_move`
+
+**注意事项**：
+- 脚本不信任 Bot 内部的规则判断，所有合法性由脚本外挂判定
+- 先后手自动交替：第 1 局 A 先手，第 2 局 B 先手，依此类推
+- 编译时自动检测 `jsoncpp/json.h` 引用并添加编译参数（但建议迁移为手动解析以避免依赖问题）
+
+---
+
+**文档版本**：v1.1  
+**最后更新**：2026-05-13
