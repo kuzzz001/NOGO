@@ -31,23 +31,19 @@ inline int elapsed_ms() {
 // ====================== MCTS (蒙特卡洛树搜索) 结构定义 ======================
 #define NODE_MAX 500000
 struct MCTSNode {
-    int x, y;          // 该节点对应的落子位置
-    bool Expanded;     // 是否已完全扩展
-    int NowChildren;   // 当前已生成的子节点数量
-    int Children[81];  // 子节点索引
-    double Value;      // 累积价值
-    double Times;      // 访问次数
-    int UnexpandedCount;    // 尚未扩展的可选动作数量
-    int UnexpandedMoves[81]; // 尚未扩展的可选动作列表
+    int x, y;
+    bool Expanded;
+    int NowChildren;
+    int Children[81];
+    double Value;
+    double Times;
 
-    // 初始化节点，避免全量 memset
     void init(int tx, int ty) {
         x = tx; y = ty;
         Expanded = false;
         NowChildren = 0;
         Value = 0;
         Times = 0;
-        UnexpandedCount = -1; // -1 表示尚未初始化可用动作
     }
 } Node[NODE_MAX] = {};
 int now = 0;           // 搜索时当前所在的节点索引
@@ -346,6 +342,7 @@ int selection() {
         }
 
         if (selec != -1) {
+            if (now_expanded + 1 >= NODE_MAX) return -1;
             Node[now].NowChildren++;
             Node[now].Children[Node[now].NowChildren] = ++now_expanded;
             Node[now_expanded].init(selec / 9, selec % 9);
